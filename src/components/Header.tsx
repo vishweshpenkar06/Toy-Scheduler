@@ -1,0 +1,142 @@
+import React from 'react';
+import { AlgorithmType, AlgorithmInfo } from '../types';
+import { soundFx } from '../utils/audio';
+
+export const ALGORITHMS: AlgorithmInfo[] = [
+  { id: 'fifo', name: 'FCFS', shortName: 'FCFS', description: 'First-Come First-Served (non-preemptive)', isPreemptive: false },
+  { id: 'sjf', name: 'SJF', shortName: 'SJF', description: 'Shortest Job First (non-preemptive)', isPreemptive: false },
+  { id: 'srtf', name: 'SRTF', shortName: 'SRTF', description: 'Shortest Remaining Time First (preemptive)', isPreemptive: true },
+  { id: 'roundRobin', name: 'Round Robin', shortName: 'Round Robin', description: 'Time-sliced quantum scheduling', isPreemptive: true, requiresQuantum: true },
+  { id: 'priorityNonPreemptive', name: 'Priority (non-preemptive)', shortName: 'Priority', description: 'Priority-based scheduling (non-preemptive)', isPreemptive: false, requiresPriority: true },
+  { id: 'priorityPreemptive', name: 'Priority (preemptive)', shortName: 'Priority', description: 'Priority-based scheduling (preemptive)', isPreemptive: true, requiresPriority: true },
+];
+
+interface HeaderProps {
+  selectedAlgorithm: AlgorithmType;
+  onSelectAlgorithm: (alg: AlgorithmType) => void;
+  viewMode: 'visualizer' | 'comparison';
+  onToggleViewMode: (mode: 'visualizer' | 'comparison') => void;
+  onOpenPresets: () => void;
+  onOpenShortcuts: () => void;
+  quantum: number;
+  onChangeQuantum: (q: number) => void;
+  soundEnabled: boolean;
+  onToggleSound: () => void;
+}
+
+const SpeakerIcon = ({ muted }: { muted: boolean }) => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M11 5 6 9H2v6h4l5 4V5Z" />
+    {muted ? <line x1="22" y1="9" x2="16" y2="15" /> : <path d="M15.5 8.5a5 5 0 0 1 0 7" />}
+    {muted ? <line x1="16" y1="9" x2="22" y2="15" /> : <path d="M18.5 6a9 9 0 0 1 0 12" />}
+  </svg>
+);
+
+const BarChartIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M6 20V10M12 20V4M18 20v-6" />
+  </svg>
+);
+
+const GridIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="4" y="4" width="16" height="16" rx="2" />
+    <path d="M9 4v16M15 4v16" />
+  </svg>
+);
+
+const FolderIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z" />
+  </svg>
+);
+
+const KeyboardIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="2" y="6" width="20" height="12" rx="2" />
+    <path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M6 14h.01M18 14h.01M9 14h6" />
+  </svg>
+);
+
+export const Header: React.FC<HeaderProps> = ({
+  selectedAlgorithm,
+  onSelectAlgorithm,
+  viewMode,
+  onToggleViewMode,
+  onOpenPresets,
+  onOpenShortcuts,
+  quantum,
+  onChangeQuantum,
+  soundEnabled,
+  onToggleSound,
+}) => {
+  return (
+    <header className="topbar">
+      <div className="brand">
+        <div className="brand-mark">QS</div>
+        <div>
+          <div className="brand-name">Quantum Scheduler</div>
+          <div className="brand-sub">CPU Algorithm Lab</div>
+        </div>
+      </div>
+
+      <div className="topbar-center">
+        <nav className="seg">
+          {ALGORITHMS.map((alg, i) => (
+            <button
+              key={alg.id}
+              className={`seg-btn ${selectedAlgorithm === alg.id && viewMode === 'visualizer' ? 'active' : ''}`}
+              onClick={() => {
+                soundFx.playClick();
+                onSelectAlgorithm(alg.id);
+                if (viewMode !== 'visualizer') onToggleViewMode('visualizer');
+              }}
+              title={alg.description}
+            >
+              <span className="seg-num">{i + 1}</span>
+              {alg.shortName}
+              {alg.requiresQuantum && <span className="seg-tag">Q</span>}
+            </button>
+          ))}
+        </nav>
+
+        {selectedAlgorithm === 'roundRobin' && viewMode === 'visualizer' && (
+          <div className="quantum">
+            <label className="quantum-label" htmlFor="quantum-input">Quantum</label>
+            <input
+              id="quantum-input"
+              className="quantum-input"
+              type="number"
+              min={1}
+              max={20}
+              value={quantum}
+              onChange={(e) => onChangeQuantum(Math.max(1, parseInt(e.target.value, 10) || 1))}
+            />
+          </div>
+        )}
+      </div>
+
+      <div className="topbar-right">
+        <button className="icon-btn" onClick={() => { soundFx.playClick(); onOpenPresets(); }} title="Load a preset workload">
+          <FolderIcon />
+        </button>
+        <button className="icon-btn" onClick={() => { soundFx.playClick(); onOpenShortcuts(); }} title="Keyboard shortcuts">
+          <KeyboardIcon />
+        </button>
+        <button className="icon-btn" onClick={() => { soundFx.playClick(); onToggleSound(); }} title={soundEnabled ? 'Mute sounds' : 'Enable sounds'}>
+          <SpeakerIcon muted={!soundEnabled} />
+        </button>
+        <button
+          className={viewMode === 'comparison' ? 'btn btn-primary' : 'btn btn-ghost'}
+          onClick={() => {
+            soundFx.playClick();
+            onToggleViewMode(viewMode === 'visualizer' ? 'comparison' : 'visualizer');
+          }}
+        >
+          {viewMode === 'comparison' ? <GridIcon /> : <BarChartIcon />}
+          {viewMode === 'comparison' ? 'Single view' : 'Compare all'}
+        </button>
+      </div>
+    </header>
+  );
+};
