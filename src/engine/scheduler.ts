@@ -5,6 +5,9 @@ import {
   TimelineSlice,
   RoundRobinOptions,
   PrioritySchedulingOptions,
+  PriorityAgingOptions,
+  MultiLevelQueueOptions,
+  MultiLevelFeedbackOptions,
   AlgorithmType,
 } from "../types";
 

@@ -55,9 +55,42 @@ export interface PrioritySchedulingOptions {
 }
 
 /**
+ * Options for Priority scheduling with aging
+ */
+export interface PriorityAgingOptions {
+  agingInterval: number;
+  agingAmount: number;
+}
+
+/**
+ * A queue definition for Multilevel Queue scheduling
+ */
+export interface QueueDefinition {
+  name: string;
+  algorithm: AlgorithmType;
+  priorityRange?: { min: number; max: number };
+}
+
+/**
+ * Options for Multilevel Queue scheduling
+ */
+export interface MultiLevelQueueOptions {
+  queues: QueueDefinition[];
+}
+
+/**
+ * Options for Multilevel Feedback Queue scheduling
+ */
+export interface MultiLevelFeedbackOptions {
+  quantumPerLevel: number[];
+  agingPromotionInterval?: number;
+  demotionThreshold?: number;
+}
+
+/**
  * Algorithm identifiers supported by the engine
  */
-export type AlgorithmType = 'fifo' | 'sjf' | 'srtf' | 'roundRobin' | 'priorityNonPreemptive' | 'priorityPreemptive';
+export type AlgorithmType = 'fifo' | 'sjf' | 'srtf' | 'roundRobin' | 'priorityNonPreemptive' | 'priorityPreemptive' | 'priorityAging' | 'multiLevelQueue' | 'multiLevelFeedback';
 
 export interface AlgorithmInfo {
   id: AlgorithmType;
