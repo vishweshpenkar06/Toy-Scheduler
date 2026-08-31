@@ -989,7 +989,7 @@ select {
 
 .gantt-inner {
   position: relative;
-  min-width: 100%;
+  min-width: 500px;
   padding-top: 26px;
 }
 
