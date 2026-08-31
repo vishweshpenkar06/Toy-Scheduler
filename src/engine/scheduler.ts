@@ -9,26 +9,45 @@ import {
 } from "../types";
 
 /**
+ * Validate a single process entry: returns an error message or null if valid.
+ * Mirrors `validateProcesses` so UI and engine enforce identical rules.
+ */
+export function validateProcessInput(p: Process): string | null {
+  if (!p.pid || !p.pid.trim()) {
+    return 'Process ID is required.';
+  }
+  if (!Number.isFinite(p.arrivalTime) || !Number.isInteger(p.arrivalTime)) {
+    return `Process ${p.pid} has invalid arrivalTime: ${p.arrivalTime}`;
+  }
+  if (p.arrivalTime < 0) {
+    return `Process ${p.pid} has negative arrivalTime: ${p.arrivalTime}`;
+  }
+  if (!Number.isFinite(p.burstTime) || !Number.isInteger(p.burstTime)) {
+    return `Process ${p.pid} has invalid burstTime: ${p.burstTime}`;
+  }
+  if (p.burstTime <= 0) {
+    return `Process ${p.pid} has invalid burstTime: ${p.burstTime}`;
+  }
+  return null;
+}
+
+/**
  * Validate process array: check for duplicates and invalid values
  */
 function validateProcesses(processes: Process[]): void {
   const pids = new Set<string>();
-  
+
   processes.forEach((p) => {
     // Check for duplicates
     if (pids.has(p.pid)) {
       throw new Error(`Duplicate process ID found: ${p.pid}`);
     }
     pids.add(p.pid);
-    
-    // Check for invalid arrival time
-    if (p.arrivalTime < 0) {
-      throw new Error(`Process ${p.pid} has negative arrivalTime: ${p.arrivalTime}`);
-    }
-    
-    // Check for invalid burst time
-    if (p.burstTime <= 0) {
-      throw new Error(`Process ${p.pid} has invalid burstTime: ${p.burstTime}`);
+
+    // Delegate value checks to the shared single-process validator
+    const message = validateProcessInput(p);
+    if (message) {
+      throw new Error(message);
     }
   });
 }

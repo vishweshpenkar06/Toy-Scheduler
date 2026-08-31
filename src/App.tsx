@@ -97,6 +97,8 @@ export default function App() {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (['INPUT', 'TEXTAREA', 'SELECT', 'BUTTON'].includes((e.target as HTMLElement).tagName)) return;
+      // Never hijack shortcuts when modifier keys are held (browser shortcuts: refresh/copy/tab-switch…)
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
 
       if (e.code === 'Space') {
         e.preventDefault();
