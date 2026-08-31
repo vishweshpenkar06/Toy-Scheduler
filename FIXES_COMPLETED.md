@@ -87,7 +87,7 @@ All 6 requested issues have been successfully fixed. The project is now a clean 
 
 ## Test Results
 
-**All 35 tests passing:**
+**All 42 tests passing:**
 
 ### FIFO Scheduling (3 tests)
 ✓ should handle basic 3-process FIFO with staggered arrival times
@@ -153,25 +153,42 @@ All 6 requested issues have been successfully fixed. The project is now a clean 
 ## File Structure
 
 ```
-/vercel/share/v0-project/
+Toy Scheduler/
 ├── index.html                      ← Vite entry point
 ├── vite.config.ts                  ← Vite config with React plugin
-├── tsconfig.json                   ← TypeScript config (ES2020, no Next.js)
+├── tsconfig.json                   ← TypeScript config (ES2020)
 ├── vitest.config.ts                ← Vitest config
-├── package.json                    ← Vite + React + TypeScript only
-├── postcss.config.mjs              ← Minimal PostCSS config
-├── pnpm-lock.yaml
+├── package.json                    ← Vite + React 19 + TypeScript
+├── eslint.config.mjs               ← ESLint config
+├── README.md                       ← Project overview and setup
+├── ENGINE_SUMMARY.md               ← Engine documentation
 ├── FIXES_COMPLETED.md              ← This file
-├── ENGINE_SUMMARY.md               ← Original engine documentation
+├── RR_FRAGMENTATION_FIX.md         ← Historical: RR fragmentation fix
 ├── src/
 │   ├── main.tsx                    ← React entry point
-│   ├── App.tsx                     ← Root component (placeholder)
+│   ├── App.tsx                     ← Root component with full app logic
 │   ├── types.ts                    ← Process type definitions
+│   ├── index.css                   ← Design system + responsive breakpoints
 │   ├── engine/
 │   │   ├── scheduler.ts            ← All 5 scheduling algorithms + validation
 │   │   └── __tests__/
-│   │       └── scheduler.test.ts   ← 35 comprehensive tests
-│   └── components/                 ← Empty (ready for UI)
+│   │       └── scheduler.test.ts   ← 42 comprehensive tests
+│   ├── data/
+│   │   └── presets.ts              ← Preset workload definitions
+│   ├── utils/
+│   │   └── audio.ts                ← Sound effects utility
+│   └── components/
+│       ├── Header.tsx              ← Top bar with algorithm nav and controls
+│       ├── GanttChart.tsx          ← Animated Gantt timeline visualization
+│       ├── ProcessControlCenter.tsx← Process list and add-process form
+│       ├── MetricsCards.tsx        ← Average waiting/turnaround/response stats
+│       ├── ProcessResultsTable.tsx ← Per-process result table
+│       ├── PlaybackControls.tsx    ← Play/pause/step transport controls
+│       ├── AlgorithmLeaderboard.tsx← Side-by-side algorithm comparison
+│       ├── CpuMonitorHud.tsx       ← Live CPU status display
+│       ├── ReadyQueueHud.tsx       ← Ready queue visualization
+│       ├── PresetsModal.tsx        ← Preset workload picker modal
+│       └── KeyboardShortcutsModal.tsx ← Keyboard shortcuts reference
 └── public/                         ← Static assets
 ```
 
@@ -180,14 +197,17 @@ All 6 requested issues have been successfully fixed. The project is now a clean 
 ## Verification Commands
 
 ```bash
-# Run all tests (should show all 35 passing)
-pnpm test --run
+# Run all tests (should show all 42 passing)
+npx vitest run
 
-# Start dev server (should boot cleanly on port 5173 or next available)
-pnpm dev
+# Type check
+npx tsc --noEmit
+
+# Lint
+npx eslint .
 
 # Build for production
-pnpm build
+npm run build
 ```
 
 ---

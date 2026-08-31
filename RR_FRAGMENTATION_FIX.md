@@ -1,4 +1,6 @@
-# Round Robin Fragmentation Fix - Complete
+# Round Robin Fragmentation Fix
+
+> **Note:** This document is historical. The fix described below has been merged and is covered by the test suite. It is preserved for reference only — no further work is required here.
 
 ## Summary
 
@@ -84,7 +86,7 @@ Removed unused shadcn files (confirmed no imports):
 
 ## Test Results
 
-**All 36 tests passing:**
+**All 42 tests passing:**
 
 ### Round Robin Scheduling (4 tests)
 ✓ should show context switches with quantum=2

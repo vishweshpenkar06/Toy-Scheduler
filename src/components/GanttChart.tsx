@@ -18,6 +18,9 @@ function niceStep(max: number): number {
 
 export const GanttChart: React.FC<GanttChartProps> = ({ timeline, processes, currentTimeStep }) => {
   const [hoveredSlice, setHoveredSlice] = useState<TimelineSlice | null>(null);
+  const [pinnedSlice, setPinnedSlice] = useState<TimelineSlice | null>(null);
+
+  const activeTooltip = pinnedSlice ?? hoveredSlice;
 
   if (timeline.length === 0) {
     return (
@@ -83,7 +86,7 @@ export const GanttChart: React.FC<GanttChartProps> = ({ timeline, processes, cur
             {/* Track */}
             <div
               className="gantt-track"
-              onMouseLeave={() => setHoveredSlice(null)}
+              onMouseLeave={() => { setHoveredSlice(null); setPinnedSlice(null); }}
             >
               {/* Gridlines */}
               {ticks.map((t) => (
@@ -98,13 +101,23 @@ export const GanttChart: React.FC<GanttChartProps> = ({ timeline, processes, cur
                 const isIdle = slice.pid === 'idle';
                 const color = isIdle ? 'transparent' : colorMap.get(slice.pid) ?? '#2154f0';
                 const isActive = index === activeSliceIndex;
+                const ariaLabel = isIdle
+                  ? `CPU idle ${slice.start} to ${slice.end} milliseconds`
+                  : `${slice.pid} ${slice.start} to ${slice.end} milliseconds, duration ${duration} milliseconds`;
 
                 return (
                   <div
                     key={index}
                     className={`gantt-block ${isIdle ? 'idle' : ''} ${isActive ? 'active' : ''}`}
                     style={{ left: `${left}%`, width: `${width}%`, backgroundColor: isIdle ? undefined : color }}
+                    tabIndex={isIdle ? undefined : 0}
+                    role={isIdle ? undefined : 'button'}
+                    aria-label={isIdle ? undefined : ariaLabel}
                     onMouseEnter={() => setHoveredSlice(slice)}
+                    onMouseLeave={() => setHoveredSlice(null)}
+                    onFocus={() => setHoveredSlice(slice)}
+                    onBlur={() => setHoveredSlice(null)}
+                    onClick={() => setPinnedSlice((prev) => (prev === slice ? null : slice))}
                   >
                     {!isIdle && width > 3.2 && (
                       <>
@@ -118,14 +131,14 @@ export const GanttChart: React.FC<GanttChartProps> = ({ timeline, processes, cur
               })}
 
               {/* Hover tooltip */}
-              {hoveredSlice && (
+              {activeTooltip && (
                 <span
                   className="gantt-tip"
-                  style={{ left: `${(hoveredSlice.start / totalTime) * 100}%` }}
+                  style={{ left: `${(activeTooltip.start / totalTime) * 100}%` }}
                 >
-                  {hoveredSlice.pid === 'idle'
-                    ? `CPU idle · ${hoveredSlice.start}–${hoveredSlice.end} ms`
-                    : `${hoveredSlice.pid} · ${hoveredSlice.start}–${hoveredSlice.end} ms`}
+                  {activeTooltip.pid === 'idle'
+                    ? `CPU idle · ${activeTooltip.start}–${activeTooltip.end} ms`
+                    : `${activeTooltip.pid} · ${activeTooltip.start}–${activeTooltip.end} ms`}
                 </span>
               )}
 

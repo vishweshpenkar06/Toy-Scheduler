@@ -117,13 +117,13 @@ export const Header: React.FC<HeaderProps> = ({
       </div>
 
       <div className="topbar-right">
-        <button className="icon-btn" onClick={() => { soundFx.playClick(); onOpenPresets(); }} title="Load a preset workload">
+        <button className="icon-btn" onClick={() => { soundFx.playClick(); onOpenPresets(); }} title="Load a preset workload" aria-label="Load a preset workload">
           <FolderIcon />
         </button>
-        <button className="icon-btn" onClick={() => { soundFx.playClick(); onOpenShortcuts(); }} title="Keyboard shortcuts">
+        <button className="icon-btn" onClick={() => { soundFx.playClick(); onOpenShortcuts(); }} title="Keyboard shortcuts" aria-label="Keyboard shortcuts">
           <KeyboardIcon />
         </button>
-        <button className="icon-btn" onClick={() => { soundFx.playClick(); onToggleSound(); }} title={soundEnabled ? 'Mute sounds' : 'Enable sounds'}>
+        <button className="icon-btn" onClick={() => { soundFx.playClick(); onToggleSound(); }} title={soundEnabled ? 'Mute sounds' : 'Enable sounds'} aria-label={soundEnabled ? 'Mute sounds' : 'Enable sounds'}>
           <SpeakerIcon muted={!soundEnabled} />
         </button>
         <button
