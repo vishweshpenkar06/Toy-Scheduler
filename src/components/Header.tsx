@@ -6,22 +6,29 @@ export const ALGORITHMS: AlgorithmInfo[] = [
   { id: 'fifo', name: 'FCFS', shortName: 'FCFS', description: 'First-Come First-Served (non-preemptive)', isPreemptive: false },
   { id: 'sjf', name: 'SJF', shortName: 'SJF', description: 'Shortest Job First (non-preemptive)', isPreemptive: false },
   { id: 'srtf', name: 'SRTF', shortName: 'SRTF', description: 'Shortest Remaining Time First (preemptive)', isPreemptive: true },
-  { id: 'roundRobin', name: 'Round Robin', shortName: 'Round Robin', description: 'Time-sliced quantum scheduling', isPreemptive: true, requiresQuantum: true },
-  { id: 'priorityNonPreemptive', name: 'Priority (non-preemptive)', shortName: 'Priority', description: 'Priority-based scheduling (non-preemptive)', isPreemptive: false, requiresPriority: true },
-  { id: 'priorityPreemptive', name: 'Priority (preemptive)', shortName: 'Priority', description: 'Priority-based scheduling (preemptive)', isPreemptive: true, requiresPriority: true },
+  { id: 'roundRobin', name: 'Round Robin', shortName: 'RR', description: 'Time-sliced quantum scheduling', isPreemptive: true, requiresQuantum: true },
+  { id: 'priorityNonPreemptive', name: 'Priority (NP)', shortName: 'Pri NP', description: 'Priority-based scheduling (non-preemptive)', isPreemptive: false, requiresPriority: true },
+  { id: 'priorityPreemptive', name: 'Priority (P)', shortName: 'Pri P', description: 'Priority-based scheduling (preemptive)', isPreemptive: true, requiresPriority: true },
+  { id: 'priorityAging', name: 'Priority + Aging', shortName: 'Pri+Aging', description: 'Priority scheduling with aging to prevent starvation', isPreemptive: true, requiresPriority: true },
+  { id: 'multiLevelQueue', name: 'Multilevel Queue', shortName: 'MLQ', description: 'Fixed priority queues with FIFO per level', isPreemptive: false },
+  { id: 'multiLevelFeedback', name: 'MLFQ', shortName: 'MLFQ', description: 'Multilevel feedback queue with aging and demotion', isPreemptive: true, requiresQuantum: true },
 ];
 
 interface HeaderProps {
   selectedAlgorithm: AlgorithmType;
   onSelectAlgorithm: (alg: AlgorithmType) => void;
-  viewMode: 'visualizer' | 'comparison';
-  onToggleViewMode: (mode: 'visualizer' | 'comparison') => void;
+  viewMode: 'visualizer' | 'comparison' | 'race';
+  onToggleViewMode: (mode: 'visualizer' | 'comparison' | 'race') => void;
   onOpenPresets: () => void;
   onOpenShortcuts: () => void;
   quantum: number;
   onChangeQuantum: (q: number) => void;
+  coreCount: number;
+  onChangeCoreCount: (c: number) => void;
   soundEnabled: boolean;
   onToggleSound: () => void;
+  shareCopied: boolean;
+  onShare: () => void;
 }
 
 const SpeakerIcon = ({ muted }: { muted: boolean }) => (
@@ -67,8 +74,12 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenShortcuts,
   quantum,
   onChangeQuantum,
+  coreCount,
+  onChangeCoreCount,
   soundEnabled,
   onToggleSound,
+  shareCopied,
+  onShare,
 }) => {
   return (
     <header className="topbar">
@@ -100,7 +111,7 @@ export const Header: React.FC<HeaderProps> = ({
           ))}
         </nav>
 
-        {selectedAlgorithm === 'roundRobin' && viewMode === 'visualizer' && (
+        {(selectedAlgorithm === 'roundRobin' || selectedAlgorithm === 'multiLevelFeedback') && viewMode === 'visualizer' && (
           <div className="quantum">
             <label className="quantum-label" htmlFor="quantum-input">Quantum</label>
             <input
@@ -114,9 +125,34 @@ export const Header: React.FC<HeaderProps> = ({
             />
           </div>
         )}
+
+        {viewMode === 'visualizer' && (
+          <div className="quantum">
+            <label className="quantum-label" htmlFor="core-count">Cores</label>
+            <select
+              id="core-count"
+              className="select"
+              value={coreCount}
+              onChange={(e) => onChangeCoreCount(parseInt(e.target.value, 10))}
+            >
+              <option value={1}>1</option>
+              <option value={2}>2</option>
+              <option value={3}>3</option>
+              <option value={4}>4</option>
+            </select>
+          </div>
+        )}
       </div>
 
       <div className="topbar-right">
+        <button
+          className="btn btn-ghost"
+          onClick={() => { soundFx.playClick(); onShare(); }}
+          title="Copy shareable link"
+          style={{ fontSize: 12 }}
+        >
+          {shareCopied ? 'Copied!' : 'Share'}
+        </button>
         <button className="icon-btn" onClick={() => { soundFx.playClick(); onOpenPresets(); }} title="Load a preset workload" aria-label="Load a preset workload">
           <FolderIcon />
         </button>
@@ -127,14 +163,14 @@ export const Header: React.FC<HeaderProps> = ({
           <SpeakerIcon muted={!soundEnabled} />
         </button>
         <button
-          className={viewMode === 'comparison' ? 'btn btn-primary' : 'btn btn-ghost'}
+          className={viewMode !== 'visualizer' ? 'btn btn-primary' : 'btn btn-ghost'}
           onClick={() => {
             soundFx.playClick();
-            onToggleViewMode(viewMode === 'visualizer' ? 'comparison' : 'visualizer');
+            onToggleViewMode(viewMode === 'visualizer' ? 'comparison' : viewMode === 'comparison' ? 'race' : 'visualizer');
           }}
         >
           {viewMode === 'comparison' ? <GridIcon /> : <BarChartIcon />}
-          {viewMode === 'comparison' ? 'Single view' : 'Compare all'}
+          {viewMode === 'visualizer' ? 'Compare all' : viewMode === 'comparison' ? 'Race' : 'Single view'}
         </button>
       </div>
     </header>

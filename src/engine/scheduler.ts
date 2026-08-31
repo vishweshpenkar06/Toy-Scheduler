@@ -525,6 +525,349 @@ export function priorityScheduling(
 }
 
 /**
+ * Priority Scheduling with Aging (prevents starvation)
+ * Processes waiting longer get a priority boost at regular intervals.
+ */
+export function priorityAgingScheduling(
+  processes: Process[],
+  options: PriorityAgingOptions
+): SimulationResult {
+  validateProcesses(processes);
+  
+  const { agingInterval, agingAmount } = options;
+  
+  if (processes.length === 0) {
+    return {
+      timeline: [],
+      processResults: [],
+      averageWaitingTime: 0,
+      averageTurnaroundTime: 0,
+      averageResponseTime: 0,
+    };
+  }
+
+  const timeline: TimelineSlice[] = [];
+  const processInfo = processes.map((p) => ({
+    ...p,
+    effectivePriority: p.priority ?? Number.MAX_SAFE_INTEGER,
+    remaining: p.burstTime,
+    lastAgingCheck: 0,
+  }));
+  const remaining = new Set(processes.map((p) => p.pid));
+  let currentTime = 0;
+
+  while (remaining.size > 0) {
+    // Apply aging to all waiting processes
+    for (const p of processInfo) {
+      if (remaining.has(p.pid) && p.arrivalTime <= currentTime) {
+        const timeSinceLastCheck = currentTime - p.lastAgingCheck;
+        if (timeSinceLastCheck >= agingInterval) {
+          // Bump priority (lower number = higher priority)
+          p.effectivePriority = Math.max(0, p.effectivePriority - Math.floor(timeSinceLastCheck / agingInterval) * agingAmount);
+          p.lastAgingCheck = currentTime;
+        }
+      }
+    }
+
+    // Find all processes that have arrived
+    const available = processInfo.filter(
+      (p) => p.arrivalTime <= currentTime && remaining.has(p.pid)
+    );
+
+    if (available.length === 0) {
+      const nextArrival = Math.min(
+        ...processInfo.filter((p) => remaining.has(p.pid)).map((p) => p.arrivalTime)
+      );
+      // Fast-forward aging to next arrival
+      currentTime = nextArrival;
+      continue;
+    }
+
+    // Pick process with highest priority (lowest number), break ties by PID
+    const process = available.sort(
+      (a, b) => a.effectivePriority - b.effectivePriority || a.pid.localeCompare(b.pid)
+    )[0];
+
+    // Find the next event: either aging would promote someone else, or the process finishes
+    let nextEventTime = currentTime + process.remaining;
+
+    // Check if any waiting process could be promoted before this process finishes
+    for (const p of processInfo) {
+      if (p.pid !== process.pid && remaining.has(p.pid) && p.arrivalTime <= currentTime) {
+        const nextAgingTime = p.lastAgingCheck + agingInterval;
+        if (nextAgingTime > currentTime && nextAgingTime < nextEventTime) {
+          nextEventTime = nextAgingTime;
+        }
+      }
+    }
+
+    const timeSlice = nextEventTime - currentTime;
+    process.remaining -= timeSlice;
+
+    timeline.push({
+      pid: process.pid,
+      start: currentTime,
+      end: nextEventTime,
+    });
+
+    if (process.remaining <= 0) {
+      remaining.delete(process.pid);
+    }
+
+    currentTime = nextEventTime;
+  }
+
+  const { results, avgWait, avgTurnaround, avgResponse } = calculateMetrics(processes, timeline);
+
+  return {
+    timeline,
+    processResults: results,
+    averageWaitingTime: avgWait,
+    averageTurnaroundTime: avgTurnaround,
+    averageResponseTime: avgResponse,
+  };
+}
+
+/**
+ * Multilevel Queue Scheduling
+ * Processes are assigned to fixed queues based on priority bands.
+ * Each queue uses FIFO. Higher-priority queues are served first.
+ */
+export function multiLevelQueueScheduling(
+  processes: Process[],
+  options: MultiLevelQueueOptions
+): SimulationResult {
+  validateProcesses(processes);
+  
+  const { queues } = options;
+  
+  if (processes.length === 0) {
+    return {
+      timeline: [],
+      processResults: [],
+      averageWaitingTime: 0,
+      averageTurnaroundTime: 0,
+      averageResponseTime: 0,
+    };
+  }
+
+  const timeline: TimelineSlice[] = [];
+  const remaining = new Set(processes.map((p) => p.pid));
+  let currentTime = 0;
+
+  const queueBuckets: Process[][] = queues.map(() => []);
+  
+  const assignProcess = (p: Process) => {
+    for (let i = 0; i < queues.length; i++) {
+      const q = queues[i];
+      if (q.priorityRange) {
+        const pri = p.priority ?? Number.MAX_SAFE_INTEGER;
+        if (pri >= q.priorityRange.min && pri <= q.priorityRange.max) {
+          queueBuckets[i].push(p);
+          return;
+        }
+      } else {
+        queueBuckets[i].push(p);
+        return;
+      }
+    }
+    queueBuckets[queues.length - 1].push(p);
+  };
+
+  const sortedByArrival = [...processes].sort(
+    (a, b) => a.arrivalTime - b.arrivalTime || a.pid.localeCompare(b.pid)
+  );
+
+  let processIndex = 0;
+
+  while (remaining.size > 0) {
+    while (processIndex < sortedByArrival.length && sortedByArrival[processIndex].arrivalTime <= currentTime) {
+      assignProcess(sortedByArrival[processIndex]);
+      processIndex++;
+    }
+
+    let selectedQueue = -1;
+    for (let i = 0; i < queueBuckets.length; i++) {
+      if (queueBuckets[i].length > 0) {
+        selectedQueue = i;
+        break;
+      }
+    }
+
+    if (selectedQueue === -1) {
+      if (processIndex < sortedByArrival.length) {
+        currentTime = sortedByArrival[processIndex].arrivalTime;
+      }
+      continue;
+    }
+
+    const process = queueBuckets[selectedQueue].shift()!;
+    
+    timeline.push({
+      pid: process.pid,
+      start: currentTime,
+      end: currentTime + process.burstTime,
+    });
+    currentTime += process.burstTime;
+    remaining.delete(process.pid);
+  }
+
+  const { results, avgWait, avgTurnaround, avgResponse } = calculateMetrics(processes, timeline);
+
+  return {
+    timeline,
+    processResults: results,
+    averageWaitingTime: avgWait,
+    averageTurnaroundTime: avgTurnaround,
+    averageResponseTime: avgResponse,
+  };
+}
+
+/**
+ * Multilevel Feedback Queue Scheduling
+ * Processes start at the highest-priority level and may be demoted
+ * based on CPU burst behavior. Each level uses Round Robin with
+ * different quanta. Processes are promoted back up after aging.
+ */
+export function multiLevelFeedbackQueueScheduling(
+  processes: Process[],
+  options: MultiLevelFeedbackOptions
+): SimulationResult {
+  validateProcesses(processes);
+  
+  const { quantumPerLevel, agingPromotionInterval = 10, demotionThreshold = 2 } = options;
+  
+  if (processes.length === 0) {
+    return {
+      timeline: [],
+      processResults: [],
+      averageWaitingTime: 0,
+      averageTurnaroundTime: 0,
+      averageResponseTime: 0,
+    };
+  }
+
+  const numLevels = quantumPerLevel.length;
+  const timeline: TimelineSlice[] = [];
+  const processInfo = processes.map((p) => ({
+    ...p,
+    remaining: p.burstTime,
+    level: 0,
+    lastServedTime: -p.arrivalTime,
+    timesSliced: 0,
+  }));
+  const remaining = new Set(processes.map((p) => p.pid));
+  const queues: (typeof processInfo[0])[][] = Array.from({ length: numLevels }, () => []);
+  let currentTime = 0;
+  let processIndex = 0;
+
+  const sortedByArrival = [...processInfo].sort(
+    (a, b) => a.arrivalTime - b.arrivalTime || a.pid.localeCompare(b.pid)
+  );
+
+  while (remaining.size > 0) {
+    // Add newly arrived processes to level 0
+    while (processIndex < sortedByArrival.length && sortedByArrival[processIndex].arrivalTime <= currentTime) {
+      const p = sortedByArrival[processIndex];
+      p.level = 0;
+      queues[0].push(p);
+      processIndex++;
+    }
+
+    // Find the highest-priority non-empty queue
+    let selectedLevel = -1;
+    for (let i = 0; i < numLevels; i++) {
+      if (queues[i].length > 0) {
+        selectedLevel = i;
+        break;
+      }
+    }
+
+    if (selectedLevel === -1) {
+      if (processIndex < sortedByArrival.length) {
+        currentTime = sortedByArrival[processIndex].arrivalTime;
+      }
+      continue;
+    }
+
+    // Aging: promote processes that have waited too long
+    for (let i = numLevels - 1; i > 0; i--) {
+      for (let j = queues[i].length - 1; j >= 0; j--) {
+        const p = queues[i][j];
+        if (currentTime - p.lastServedTime >= agingPromotionInterval) {
+          queues[i].splice(j, 1);
+          p.level = i - 1;
+          queues[i - 1].push(p);
+        }
+      }
+    }
+
+    // Re-find highest non-empty level after aging
+    selectedLevel = -1;
+    for (let i = 0; i < numLevels; i++) {
+      if (queues[i].length > 0) {
+        selectedLevel = i;
+        break;
+      }
+    }
+
+    if (selectedLevel === -1) {
+      if (processIndex < sortedByArrival.length) {
+        currentTime = sortedByArrival[processIndex].arrivalTime;
+      }
+      continue;
+    }
+
+    const quantum = quantumPerLevel[selectedLevel];
+    const process = queues[selectedLevel].shift()!;
+    const timeSlice = Math.min(quantum, process.remaining);
+
+    timeline.push({
+      pid: process.pid,
+      start: currentTime,
+      end: currentTime + timeSlice,
+    });
+
+    currentTime += timeSlice;
+    process.remaining -= timeSlice;
+    process.lastServedTime = currentTime;
+    process.timesSliced++;
+
+    // Add newly arrived processes
+    while (processIndex < sortedByArrival.length && sortedByArrival[processIndex].arrivalTime <= currentTime) {
+      const p = sortedByArrival[processIndex];
+      p.level = 0;
+      queues[0].push(p);
+      processIndex++;
+    }
+
+    if (process.remaining > 0) {
+      if (process.timesSliced >= demotionThreshold && selectedLevel < numLevels - 1) {
+        // Demote to lower-priority queue
+        process.level = selectedLevel + 1;
+        process.timesSliced = 0;
+        queues[selectedLevel + 1].push(process);
+      } else {
+        // Stay at current level
+        queues[selectedLevel].push(process);
+      }
+    } else {
+      remaining.delete(process.pid);
+    }
+  }
+
+  const { results, avgWait, avgTurnaround, avgResponse } = calculateMetrics(processes, timeline);
+
+  return {
+    timeline,
+    processResults: results,
+    averageWaitingTime: avgWait,
+    averageTurnaroundTime: avgTurnaround,
+    averageResponseTime: avgResponse,
+  };
+}
+
+/**
  * Uniform dispatcher: runs the given scheduling algorithm over a workload.
  * The default quantum is used for Round Robin when none is supplied.
  */
@@ -546,5 +889,72 @@ export function runAlgorithm(
       return priorityScheduling(processes, { preemptive: false });
     case 'priorityPreemptive':
       return priorityScheduling(processes, { preemptive: true });
+    case 'priorityAging':
+      return priorityAgingScheduling(processes, { agingInterval: 3, agingAmount: 1 });
+    case 'multiLevelQueue':
+      return multiLevelQueueScheduling(processes, {
+        queues: [
+          { name: 'System', priorityRange: { min: 0, max: 1 } },
+          { name: 'Interactive', priorityRange: { min: 2, max: 3 } },
+          { name: 'Batch', priorityRange: { min: 4, max: Number.MAX_SAFE_INTEGER } },
+        ],
+      });
+    case 'multiLevelFeedback':
+      return multiLevelFeedbackQueueScheduling(processes, {
+        quantumPerLevel: [2, 4, 8],
+        agingPromotionInterval: 10,
+        demotionThreshold: 2,
+      });
   }
+}
+
+/**
+ * Multi-core scheduling simulation.
+ * Uses a global ready queue and dispatches to whichever core frees up next.
+ * For coreCount=1, produces byte-identical output to single-core scheduling.
+ */
+export function runMultiCore(
+  singleCoreResult: SimulationResult,
+  coreCount: number
+): SimulationResult {
+  if (coreCount <= 1 || singleCoreResult.timeline.length === 0) {
+    return singleCoreResult;
+  }
+
+  const coreCountCapped = Math.min(4, Math.max(1, coreCount));
+  const coreFreeAt: number[] = new Array(coreCountCapped).fill(0);
+  const newTimeline: TimelineSlice[] = [];
+
+  for (const slice of singleCoreResult.timeline) {
+    if (slice.pid === 'idle') {
+      // Idle gaps are global; keep as-is on core 0
+      newTimeline.push({ ...slice, core: 0 });
+      continue;
+    }
+
+    // Find the core that frees up earliest
+    let bestCore = 0;
+    let bestTime = coreFreeAt[0];
+    for (let c = 1; c < coreCountCapped; c++) {
+      if (coreFreeAt[c] < bestTime) {
+        bestTime = coreFreeAt[c];
+        bestCore = c;
+      }
+    }
+
+    const duration = slice.end - slice.start;
+    const start = Math.max(slice.start, coreFreeAt[bestCore]);
+    const end = start + duration;
+
+    newTimeline.push({ pid: slice.pid, start, end, core: bestCore });
+    coreFreeAt[bestCore] = end;
+  }
+
+  return {
+    timeline: newTimeline,
+    processResults: singleCoreResult.processResults,
+    averageWaitingTime: singleCoreResult.averageWaitingTime,
+    averageTurnaroundTime: singleCoreResult.averageTurnaroundTime,
+    averageResponseTime: singleCoreResult.averageResponseTime,
+  };
 }

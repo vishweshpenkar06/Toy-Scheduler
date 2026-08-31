@@ -1,6 +1,10 @@
 import { describe, it, expect } from "vitest";
 import { Process } from "../../types";
-import { fifo, sjf, srtf, roundRobin, priorityScheduling } from "../scheduler";
+import {
+  fifo, sjf, srtf, roundRobin, priorityScheduling,
+  priorityAgingScheduling, multiLevelQueueScheduling, multiLevelFeedbackQueueScheduling,
+  runMultiCore,
+} from "../scheduler";
 
 describe("FIFO Scheduling", () => {
   it("should handle basic 3-process FIFO with staggered arrival times", () => {
@@ -633,6 +637,364 @@ describe("Validation Tests", () => {
       expect(() => srtf([invalidProcess])).toThrow();
       expect(() => roundRobin([invalidProcess], { quantum: 2 })).toThrow();
       expect(() => priorityScheduling([invalidProcess], { preemptive: false })).toThrow();
+      expect(() => priorityAgingScheduling([invalidProcess], { agingInterval: 3, agingAmount: 1 })).toThrow();
+      expect(() => multiLevelQueueScheduling([invalidProcess], { queues: [{ name: 'Q0' }] })).toThrow();
+      expect(() => multiLevelFeedbackQueueScheduling([invalidProcess], { quantumPerLevel: [2, 4] })).toThrow();
     });
+  });
+});
+
+describe("Priority Scheduling with Aging", () => {
+  it("should prevent starvation by aging high-priority processes upward", () => {
+    // P1 has low priority (3), P2/P3/P4 have high priority (1) and arrive later
+    // Without aging, P1 could be starved
+    const processes: Process[] = [
+      { pid: "P1", arrivalTime: 0, burstTime: 10, priority: 3 },
+      { pid: "P2", arrivalTime: 1, burstTime: 2, priority: 1 },
+      { pid: "P3", arrivalTime: 2, burstTime: 2, priority: 1 },
+      { pid: "P4", arrivalTime: 3, burstTime: 2, priority: 1 },
+    ];
+
+    const result = priorityAgingScheduling(processes, { agingInterval: 3, agingAmount: 1 });
+
+    // All processes should complete
+    expect(result.processResults.length).toBe(4);
+    
+    // P1 should eventually complete (not starved forever)
+    const p1Result = result.processResults.find((r) => r.pid === "P1")!;
+    expect(p1Result.completionTime).toBeLessThan(50); // Reasonable bound
+  });
+
+  it("should handle empty process list", () => {
+    const result = priorityAgingScheduling([], { agingInterval: 3, agingAmount: 1 });
+    expect(result.timeline).toEqual([]);
+    expect(result.processResults).toEqual([]);
+  });
+
+  it("should produce valid timeline with no gaps in scheduling", () => {
+    const processes: Process[] = [
+      { pid: "P1", arrivalTime: 0, burstTime: 5, priority: 2 },
+      { pid: "P2", arrivalTime: 0, burstTime: 3, priority: 1 },
+    ];
+
+    const result = priorityAgingScheduling(processes, { agingInterval: 3, agingAmount: 1 });
+
+    // Total work should equal sum of burst times
+    const totalTime = result.timeline.reduce((sum, s) => sum + (s.end - s.start), 0);
+    expect(totalTime).toBe(8);
+  });
+
+  it("should maintain determinism", () => {
+    const processes: Process[] = [
+      { pid: "P1", arrivalTime: 0, burstTime: 6, priority: 3 },
+      { pid: "P2", arrivalTime: 2, burstTime: 3, priority: 1 },
+      { pid: "P3", arrivalTime: 4, burstTime: 2, priority: 2 },
+    ];
+
+    const r1 = priorityAgingScheduling(processes, { agingInterval: 3, agingAmount: 1 });
+    const r2 = priorityAgingScheduling(processes, { agingInterval: 3, agingAmount: 1 });
+    expect(r1.timeline).toEqual(r2.timeline);
+  });
+
+  it("should handle single process", () => {
+    const processes: Process[] = [{ pid: "P1", arrivalTime: 0, burstTime: 5 }];
+    const result = priorityAgingScheduling(processes, { agingInterval: 3, agingAmount: 1 });
+    expect(result.timeline).toEqual([{ pid: "P1", start: 0, end: 5 }]);
+  });
+
+  it("should validate duplicate PIDs", () => {
+    const processes: Process[] = [
+      { pid: "P1", arrivalTime: 0, burstTime: 5 },
+      { pid: "P1", arrivalTime: 1, burstTime: 3 },
+    ];
+    expect(() => priorityAgingScheduling(processes, { agingInterval: 3, agingAmount: 1 })).toThrow("Duplicate process ID found: P1");
+  });
+});
+
+describe("Multilevel Queue Scheduling", () => {
+  it("should schedule high-priority queue before low-priority queue", () => {
+    const processes: Process[] = [
+      { pid: "P1", arrivalTime: 0, burstTime: 5, priority: 5 },
+      { pid: "P2", arrivalTime: 0, burstTime: 5, priority: 1 },
+    ];
+
+    const result = multiLevelQueueScheduling(processes, {
+      queues: [
+        { name: "High", priorityRange: { min: 0, max: 2 } },
+        { name: "Low", priorityRange: { min: 3, max: Number.MAX_SAFE_INTEGER } },
+      ],
+    });
+
+    // P2 (high priority) should run first
+    expect(result.timeline[0].pid).toBe("P2");
+    expect(result.timeline[1].pid).toBe("P1");
+  });
+
+  it("should use FIFO within each queue level", () => {
+    const processes: Process[] = [
+      { pid: "P1", arrivalTime: 0, burstTime: 3, priority: 1 },
+      { pid: "P2", arrivalTime: 0, burstTime: 3, priority: 1 },
+      { pid: "P3", arrivalTime: 0, burstTime: 3, priority: 5 },
+      { pid: "P4", arrivalTime: 0, burstTime: 3, priority: 5 },
+    ];
+
+    const result = multiLevelQueueScheduling(processes, {
+      queues: [
+        { name: "High", priorityRange: { min: 0, max: 2 } },
+        { name: "Low", priorityRange: { min: 3, max: Number.MAX_SAFE_INTEGER } },
+      ],
+    });
+
+    // High queue: P1, P2 (FIFO by PID)
+    // Low queue: P3, P4 (FIFO by PID)
+    expect(result.timeline.map((s) => s.pid)).toEqual(["P1", "P2", "P3", "P4"]);
+  });
+
+  it("should handle empty process list", () => {
+    const result = multiLevelQueueScheduling([], {
+      queues: [{ name: "Q0" }],
+    });
+    expect(result.timeline).toEqual([]);
+  });
+
+  it("should handle processes arriving at different times", () => {
+    const processes: Process[] = [
+      { pid: "P1", arrivalTime: 0, burstTime: 4, priority: 5 },
+      { pid: "P2", arrivalTime: 5, burstTime: 3, priority: 1 },
+    ];
+
+    const result = multiLevelQueueScheduling(processes, {
+      queues: [
+        { name: "High", priorityRange: { min: 0, max: 2 } },
+        { name: "Low", priorityRange: { min: 3, max: Number.MAX_SAFE_INTEGER } },
+      ],
+    });
+
+    // P1 runs first (only process at t=0), then P2 arrives at t=5
+    expect(result.timeline[0]).toEqual({ pid: "P1", start: 0, end: 4 });
+    expect(result.timeline[1]).toEqual({ pid: "P2", start: 5, end: 8 });
+  });
+
+  it("should validate duplicate PIDs", () => {
+    const processes: Process[] = [
+      { pid: "P1", arrivalTime: 0, burstTime: 5 },
+      { pid: "P1", arrivalTime: 1, burstTime: 3 },
+    ];
+    expect(() => multiLevelQueueScheduling(processes, { queues: [{ name: "Q0" }] })).toThrow("Duplicate process ID found: P1");
+  });
+
+  it("should maintain determinism", () => {
+    const processes: Process[] = [
+      { pid: "P1", arrivalTime: 0, burstTime: 5, priority: 1 },
+      { pid: "P2", arrivalTime: 1, burstTime: 3, priority: 3 },
+      { pid: "P3", arrivalTime: 2, burstTime: 2, priority: 5 },
+    ];
+
+    const opts = { queues: [{ name: "High", priorityRange: { min: 0, max: 2 } }, { name: "Low", priorityRange: { min: 3, max: Number.MAX_SAFE_INTEGER } }] };
+    const r1 = multiLevelQueueScheduling(processes, opts);
+    const r2 = multiLevelQueueScheduling(processes, opts);
+    expect(r1.timeline).toEqual(r2.timeline);
+  });
+});
+
+describe("Multilevel Feedback Queue Scheduling", () => {
+  it("should schedule all processes to completion", () => {
+    const processes: Process[] = [
+      { pid: "P1", arrivalTime: 0, burstTime: 8 },
+      { pid: "P2", arrivalTime: 0, burstTime: 4 },
+      { pid: "P3", arrivalTime: 2, burstTime: 3 },
+    ];
+
+    const result = multiLevelFeedbackQueueScheduling(processes, {
+      quantumPerLevel: [2, 4, 8],
+      agingPromotionInterval: 10,
+      demotionThreshold: 2,
+    });
+
+    expect(result.processResults.length).toBe(3);
+    
+    // Total work should equal sum of burst times
+    const totalTime = result.timeline.reduce((sum, s) => sum + (s.end - s.start), 0);
+    expect(totalTime).toBe(15);
+  });
+
+  it("should demote processes that use multiple quanta", () => {
+    // P1 has burst 10 — it should be demoted from level 0 to level 1 to level 2
+    const processes: Process[] = [
+      { pid: "P1", arrivalTime: 0, burstTime: 10 },
+    ];
+
+    const result = multiLevelFeedbackQueueScheduling(processes, {
+      quantumPerLevel: [2, 4, 8],
+      agingPromotionInterval: 10,
+      demotionThreshold: 1,
+    });
+
+    // P1 should have multiple slices (2 + 4 + 4 = 10)
+    const p1Slices = result.timeline.filter((s) => s.pid === "P1");
+    expect(p1Slices.length).toBeGreaterThan(1);
+    
+    // Total work should be correct
+    const totalTime = result.timeline.reduce((sum, s) => sum + (s.end - s.start), 0);
+    expect(totalTime).toBe(10);
+  });
+
+  it("should handle empty process list", () => {
+    const result = multiLevelFeedbackQueueScheduling([], {
+      quantumPerLevel: [2, 4, 8],
+    });
+    expect(result.timeline).toEqual([]);
+  });
+
+  it("should handle single process with short burst (stays in top queue)", () => {
+    const processes: Process[] = [
+      { pid: "P1", arrivalTime: 0, burstTime: 2 },
+    ];
+
+    const result = multiLevelFeedbackQueueScheduling(processes, {
+      quantumPerLevel: [2, 4, 8],
+      demotionThreshold: 2,
+    });
+
+    // P1 finishes in one slice
+    expect(result.timeline).toEqual([{ pid: "P1", start: 0, end: 2 }]);
+  });
+
+  it("should validate duplicate PIDs", () => {
+    const processes: Process[] = [
+      { pid: "P1", arrivalTime: 0, burstTime: 5 },
+      { pid: "P1", arrivalTime: 1, burstTime: 3 },
+    ];
+    expect(() => multiLevelFeedbackQueueScheduling(processes, { quantumPerLevel: [2, 4] })).toThrow("Duplicate process ID found: P1");
+  });
+
+  it("should maintain determinism", () => {
+    const processes: Process[] = [
+      { pid: "P1", arrivalTime: 0, burstTime: 6 },
+      { pid: "P2", arrivalTime: 1, burstTime: 4 },
+    ];
+
+    const opts = { quantumPerLevel: [2, 4, 8] };
+    const r1 = multiLevelFeedbackQueueScheduling(processes, opts);
+    const r2 = multiLevelFeedbackQueueScheduling(processes, opts);
+    expect(r1.timeline).toEqual(r2.timeline);
+  });
+
+  it("should handle staggered arrivals", () => {
+    const processes: Process[] = [
+      { pid: "P1", arrivalTime: 0, burstTime: 6 },
+      { pid: "P2", arrivalTime: 3, burstTime: 3 },
+    ];
+
+    const result = multiLevelFeedbackQueueScheduling(processes, {
+      quantumPerLevel: [2, 4],
+      demotionThreshold: 2,
+    });
+
+    // All slices should be contiguous (no gaps)
+    for (let i = 1; i < result.timeline.length; i++) {
+      expect(result.timeline[i].start).toBe(result.timeline[i - 1].end);
+    }
+  });
+});
+
+describe("Multi-Core Scheduling", () => {
+  it("should produce identical output for coreCount=1", () => {
+    const processes: Process[] = [
+      { pid: "P1", arrivalTime: 0, burstTime: 8 },
+      { pid: "P2", arrivalTime: 1, burstTime: 4 },
+      { pid: "P3", arrivalTime: 2, burstTime: 2 },
+    ];
+
+    const singleCore = fifo(processes);
+    const oneCore = runMultiCore(singleCore, 1);
+
+    expect(oneCore.timeline).toEqual(singleCore.timeline);
+  });
+
+  it("should assign slices to different cores with 2 cores", () => {
+    const processes: Process[] = [
+      { pid: "P1", arrivalTime: 0, burstTime: 5 },
+      { pid: "P2", arrivalTime: 0, burstTime: 5 },
+      { pid: "P3", arrivalTime: 0, burstTime: 5 },
+    ];
+
+    const singleCore = fifo(processes);
+    const twoCore = runMultiCore(singleCore, 2);
+
+    // With 2 cores, some slices should be on core 0 and some on core 1
+    const cores = new Set(twoCore.timeline.filter((s) => s.pid !== 'idle').map((s) => s.core));
+    expect(cores.size).toBeGreaterThan(1);
+
+    // All slices should have core assigned
+    twoCore.timeline.forEach((s) => {
+      expect(s.core).toBeDefined();
+    });
+  });
+
+  it("should handle 4 cores", () => {
+    const processes: Process[] = [
+      { pid: "P1", arrivalTime: 0, burstTime: 4 },
+      { pid: "P2", arrivalTime: 0, burstTime: 4 },
+      { pid: "P3", arrivalTime: 0, burstTime: 4 },
+      { pid: "P4", arrivalTime: 0, burstTime: 4 },
+    ];
+
+    const singleCore = fifo(processes);
+    const fourCore = runMultiCore(singleCore, 4);
+
+    // All 4 processes should complete
+    expect(fourCore.processResults.length).toBe(4);
+  });
+
+  it("should handle empty timeline", () => {
+    const result = runMultiCore({
+      timeline: [],
+      processResults: [],
+      averageWaitingTime: 0,
+      averageTurnaroundTime: 0,
+      averageResponseTime: 0,
+    }, 2);
+
+    expect(result.timeline).toEqual([]);
+  });
+
+  it("should not have overlapping slices on the same core", () => {
+    const processes: Process[] = [
+      { pid: "P1", arrivalTime: 0, burstTime: 8 },
+      { pid: "P2", arrivalTime: 0, burstTime: 6 },
+      { pid: "P3", arrivalTime: 0, burstTime: 4 },
+      { pid: "P4", arrivalTime: 0, burstTime: 3 },
+    ];
+
+    const singleCore = fifo(processes);
+    const twoCore = runMultiCore(singleCore, 2);
+
+    // Check no overlapping slices on same core
+    for (const slice1 of twoCore.timeline) {
+      if (slice1.pid === 'idle') continue;
+      for (const slice2 of twoCore.timeline) {
+        if (slice2.pid === 'idle') continue;
+        if (slice1 === slice2) continue;
+        if (slice1.core === slice2.core) {
+          // These should not overlap
+          const noOverlap = slice1.end <= slice2.start || slice2.end <= slice1.start;
+          expect(noOverlap).toBe(true);
+        }
+      }
+    }
+  });
+
+  it("should preserve metrics from single-core result", () => {
+    const processes: Process[] = [
+      { pid: "P1", arrivalTime: 0, burstTime: 5 },
+      { pid: "P2", arrivalTime: 0, burstTime: 3 },
+    ];
+
+    const singleCore = fifo(processes);
+    const twoCore = runMultiCore(singleCore, 2);
+
+    expect(twoCore.averageWaitingTime).toBe(singleCore.averageWaitingTime);
+    expect(twoCore.averageTurnaroundTime).toBe(singleCore.averageTurnaroundTime);
   });
 });

@@ -36,9 +36,9 @@
   --radius-lg: 14px;
   --radius-full: 999px;
 
-  --shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.05);
-  --shadow-md: 0 6px 20px rgba(16, 24, 40, 0.08);
-  --shadow-lg: 0 20px 48px rgba(16, 24, 40, 0.14);
+  --shadow-sm: 0 1px 3px rgba(16, 24, 40, 0.04);
+  --shadow-md: 0 4px 16px rgba(16, 24, 40, 0.06);
+  --shadow-lg: 0 16px 40px rgba(16, 24, 40, 0.12);
 
   --ease: cubic-bezier(0.2, 0, 0, 1);
 }
@@ -502,6 +502,17 @@ select {
   border: 1px solid rgba(211, 56, 47, 0.25);
   border-radius: var(--radius-sm);
   padding: 7px 10px;
+}
+
+.input-error {
+  border-color: var(--red) !important;
+  box-shadow: 0 0 0 2px rgba(211, 56, 47, 0.15) !important;
+}
+
+.field-error {
+  font-size: 11px;
+  color: var(--red);
+  margin-top: 2px;
 }
 
 .color-row {
@@ -1538,6 +1549,7 @@ select {
 :focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
+  box-shadow: 0 0 0 4px rgba(33, 84, 240, 0.18);
 }
 
 button:focus:not(:focus-visible),

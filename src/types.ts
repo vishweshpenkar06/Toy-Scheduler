@@ -16,6 +16,7 @@ export interface TimelineSlice {
   pid: string | "idle";
   start: number;
   end: number;
+  core?: number;
 }
 
 /**
@@ -30,6 +31,14 @@ export interface ProcessResult {
 }
 
 /**
+ * A single decision entry in the scheduler's log
+ */
+export interface DecisionEntry {
+  time: number;
+  message: string;
+}
+
+/**
  * Complete simulation result including timeline and metrics
  */
 export interface SimulationResult {
@@ -38,6 +47,7 @@ export interface SimulationResult {
   averageWaitingTime: number;
   averageTurnaroundTime: number;
   averageResponseTime: number;
+  decisionLog?: DecisionEntry[];
 }
 
 /**
@@ -67,7 +77,7 @@ export interface PriorityAgingOptions {
  */
 export interface QueueDefinition {
   name: string;
-  algorithm: AlgorithmType;
+  algorithm?: AlgorithmType;
   priorityRange?: { min: number; max: number };
 }
 

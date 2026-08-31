@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { Process } from '../types';
 import { soundFx } from '../utils/audio';
+import { validateProcessInput } from '../engine/scheduler';
 
 const COLOR_PALETTE = ['#2563eb', '#0ea5e9', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#64748b'];
 
@@ -11,6 +12,7 @@ interface ProcessControlCenterProps {
   onClearAll: () => void;
   onResetDefault: () => void;
   onGenerateRandom: () => void;
+  onImportProcesses: (processes: Process[]) => void;
 }
 
 const PlusIcon = () => (
@@ -44,6 +46,53 @@ const ResetIcon = () => (
   </svg>
 );
 
+const DownloadIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+    <polyline points="7 10 12 15 17 10" />
+    <line x1="12" y1="15" x2="12" y2="3" />
+  </svg>
+);
+
+const UploadIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+    <polyline points="17 8 12 3 7 8" />
+    <line x1="12" y1="3" x2="12" y2="15" />
+  </svg>
+);
+
+function parseCSV(text: string): Process[] {
+  const lines = text.trim().split('\n');
+  if (lines.length < 2) return [];
+  const header = lines[0].toLowerCase();
+  const hasHeader = header.includes('pid') || header.includes('process');
+  const dataLines = hasHeader ? lines.slice(1) : lines;
+
+  return dataLines
+    .filter((line) => line.trim())
+    .map((line, idx) => {
+      const cols = line.split(',').map((c) => c.trim());
+      const pid = cols[0] || `P${idx + 1}`;
+      const arrivalTime = parseInt(cols[1], 10) || 0;
+      const burstTime = parseInt(cols[2], 10) || 1;
+      const priority = cols[3] ? parseInt(cols[3], 10) : undefined;
+      return { pid: pid.toUpperCase(), arrivalTime, burstTime, priority, color: COLOR_PALETTE[idx % COLOR_PALETTE.length] };
+    });
+}
+
+function parseJSON(text: string): Process[] {
+  const data = JSON.parse(text);
+  const arr = Array.isArray(data) ? data : data.processes ?? [];
+  return arr.map((p: Record<string, unknown>, idx: number) => ({
+    pid: String(p.pid || `P${idx + 1}`).toUpperCase(),
+    arrivalTime: Number(p.arrivalTime) || 0,
+    burstTime: Number(p.burstTime) || 1,
+    priority: p.priority != null ? Number(p.priority) : undefined,
+    color: String(p.color || COLOR_PALETTE[idx % COLOR_PALETTE.length]),
+  }));
+}
+
 export const ProcessControlCenter: React.FC<ProcessControlCenterProps> = ({
   processes,
   onAddProcess,
@@ -51,33 +100,50 @@ export const ProcessControlCenter: React.FC<ProcessControlCenterProps> = ({
   onClearAll,
   onResetDefault,
   onGenerateRandom,
+  onImportProcesses,
 }) => {
   const [pid, setPid] = useState(`P${processes.length + 1}`);
   const [arrivalTime, setArrivalTime] = useState(0);
   const [burstTime, setBurstTime] = useState(4);
   const [priority, setPriority] = useState(1);
   const [selectedColor, setSelectedColor] = useState(COLOR_PALETTE[processes.length % COLOR_PALETTE.length]);
-  const [errorMsg, setErrorMsg] = useState('');
+  const [pidError, setPidError] = useState('');
+  const [arrivalError, setArrivalError] = useState('');
+  const [burstError, setBurstError] = useState('');
+  const [importError, setImportError] = useState('');
+  const [showRandomSliders, setShowRandomSliders] = useState(false);
+  const [randCount, setRandCount] = useState(5);
+  const [randBurstMin, setRandBurstMin] = useState(2);
+  const [randBurstMax, setRandBurstMax] = useState(10);
+  const [randArrivalSpread, setRandArrivalSpread] = useState(8);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFieldBlur = () => {
+    setPidError('');
+    setArrivalError('');
+    setBurstError('');
+
+    if (!pid.trim()) {
+      setPidError('Process ID is required.');
+    } else if (processes.some((p) => p.pid === pid.trim().toUpperCase()) && pid.trim().toUpperCase() !== '') {
+      setPidError(`"${pid.trim().toUpperCase()}" already exists.`);
+    }
+    if (arrivalTime < 0) {
+      setArrivalError('Cannot be negative.');
+    }
+    if (burstTime <= 0) {
+      setBurstError('Must be greater than zero.');
+    }
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    setErrorMsg('');
+    handleFieldBlur();
+    if (pidError || arrivalError || burstError) return;
 
     const trimmedPid = pid.trim().toUpperCase();
     if (!trimmedPid) {
-      setErrorMsg('Process ID is required.');
-      return;
-    }
-    if (processes.some((p) => p.pid === trimmedPid)) {
-      setErrorMsg(`A process named "${trimmedPid}" already exists.`);
-      return;
-    }
-    if (arrivalTime < 0) {
-      setErrorMsg('Arrival time cannot be negative.');
-      return;
-    }
-    if (burstTime <= 0) {
-      setErrorMsg('Burst time must be greater than zero.');
+      setPidError('Process ID is required.');
       return;
     }
 
@@ -89,6 +155,93 @@ export const ProcessControlCenter: React.FC<ProcessControlCenterProps> = ({
     setArrivalTime(0);
     setBurstTime(4);
     setPriority(1);
+  };
+
+  const handleExportJSON = () => {
+    const data = JSON.stringify(processes, null, 2);
+    const blob = new Blob([data], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'workload.json';
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleExportCSV = () => {
+    const header = 'pid,arrivalTime,burstTime,priority';
+    const rows = processes.map((p) => `${p.pid},${p.arrivalTime},${p.burstTime},${p.priority ?? ''}`);
+    const data = [header, ...rows].join('\n');
+    const blob = new Blob([data], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'workload.csv';
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImportError('');
+
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      try {
+        const text = ev.target?.result as string;
+        let imported: Process[];
+        if (file.name.endsWith('.json')) {
+          imported = parseJSON(text);
+        } else {
+          imported = parseCSV(text);
+        }
+
+        if (imported.length === 0) {
+          setImportError('No valid processes found in file.');
+          return;
+        }
+
+        // Validate each process
+        const errors: string[] = [];
+        imported.forEach((p) => {
+          const err = validateProcessInput(p);
+          if (err) errors.push(err);
+        });
+        if (errors.length > 0) {
+          setImportError(errors[0]);
+          return;
+        }
+
+        // Check for duplicates
+        const pids = new Set<string>();
+        for (const p of imported) {
+          if (pids.has(p.pid)) {
+            setImportError(`Duplicate PID "${p.pid}" in imported data.`);
+            return;
+          }
+          pids.add(p.pid);
+        }
+
+        onImportProcesses(imported);
+      } catch {
+        setImportError('Failed to parse file. Check format (JSON or CSV).');
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = '';
+  };
+
+  const handleGenerateWithSliders = () => {
+    soundFx.playClick();
+    const generated: Process[] = Array.from({ length: randCount }).map((_, idx) => ({
+      pid: `P${idx + 1}`,
+      arrivalTime: idx === 0 ? 0 : Math.floor(Math.random() * randArrivalSpread),
+      burstTime: Math.floor(Math.random() * (randBurstMax - randBurstMin + 1)) + randBurstMin,
+      priority: Math.floor(Math.random() * 5),
+      color: COLOR_PALETTE[idx % COLOR_PALETTE.length],
+    }));
+    onImportProcesses(generated);
   };
 
   return (
@@ -104,6 +257,9 @@ export const ProcessControlCenter: React.FC<ProcessControlCenterProps> = ({
             <button className="btn btn-quiet" title="Generate random workload" onClick={() => { soundFx.playClick(); onGenerateRandom(); }}>
               <DiceIcon /> Random
             </button>
+            <button className="btn btn-quiet" title="Advanced random generator" onClick={() => { soundFx.playClick(); setShowRandomSliders(!showRandomSliders); }}>
+              <DiceIcon /> Custom
+            </button>
             <button className="btn btn-quiet" title="Reset to default preset" onClick={() => { soundFx.playClick(); onResetDefault(); }}>
               <ResetIcon /> Reset
             </button>
@@ -113,6 +269,58 @@ export const ProcessControlCenter: React.FC<ProcessControlCenterProps> = ({
           </div>
         </div>
         <div className="hairline" />
+
+        {/* Import/Export */}
+        <div style={{ display: 'flex', gap: 4, padding: '8px 12px', borderBottom: '1px solid var(--border)' }}>
+          <button className="btn btn-quiet" style={{ fontSize: 11 }} onClick={handleExportJSON}>
+            <DownloadIcon /> JSON
+          </button>
+          <button className="btn btn-quiet" style={{ fontSize: 11 }} onClick={handleExportCSV}>
+            <DownloadIcon /> CSV
+          </button>
+          <button className="btn btn-quiet" style={{ fontSize: 11 }} onClick={() => fileInputRef.current?.click()}>
+            <UploadIcon /> Import
+          </button>
+          <input ref={fileInputRef} type="file" accept=".json,.csv" onChange={handleImport} style={{ display: 'none' }} />
+        </div>
+        {importError && (
+          <div style={{ padding: '6px 12px' }}>
+            <div className="form-error" style={{ fontSize: 11 }}>
+              {importError}
+            </div>
+          </div>
+        )}
+
+        {/* Random workload sliders */}
+        {showRandomSliders && (
+          <div style={{ padding: '10px 12px', borderBottom: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--text-3)' }}>
+              Custom random generator
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+              <label style={{ fontSize: 12, color: 'var(--text-2)' }}>
+                Processes: <strong>{randCount}</strong>
+                <input type="range" min={2} max={12} value={randCount} onChange={(e) => setRandCount(parseInt(e.target.value))} style={{ width: '100%' }} />
+              </label>
+              <label style={{ fontSize: 12, color: 'var(--text-2)' }}>
+                Burst min: <strong>{randBurstMin}</strong>
+                <input type="range" min={1} max={10} value={randBurstMin} onChange={(e) => setRandBurstMin(parseInt(e.target.value))} style={{ width: '100%' }} />
+              </label>
+              <label style={{ fontSize: 12, color: 'var(--text-2)' }}>
+                Burst max: <strong>{randBurstMax}</strong>
+                <input type="range" min={2} max={20} value={randBurstMax} onChange={(e) => setRandBurstMax(parseInt(e.target.value))} style={{ width: '100%' }} />
+              </label>
+              <label style={{ fontSize: 12, color: 'var(--text-2)' }}>
+                Arrival spread: <strong>{randArrivalSpread}</strong>
+                <input type="range" min={1} max={20} value={randArrivalSpread} onChange={(e) => setRandArrivalSpread(parseInt(e.target.value))} style={{ width: '100%' }} />
+              </label>
+            </div>
+            <button className="btn btn-primary" style={{ fontSize: 12, padding: '5px 10px' }} onClick={handleGenerateWithSliders}>
+              <DiceIcon /> Generate
+            </button>
+          </div>
+        )}
+
         {processes.length === 0 ? (
           <div className="empty-state">
             <div className="empty-title">An empty workload</div>
@@ -153,17 +361,20 @@ export const ProcessControlCenter: React.FC<ProcessControlCenterProps> = ({
         <form className="card-body" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }} onSubmit={handleSubmit}>
           <div className="field">
             <label className="field-label" htmlFor="pid-field">Process ID</label>
-            <input id="pid-field" className="input" value={pid} onChange={(e) => setPid(e.target.value)} placeholder="e.g. P5" />
+            <input id="pid-field" className={`input ${pidError ? 'input-error' : ''}`} value={pid} onChange={(e) => { setPid(e.target.value); setPidError(''); }} onBlur={handleFieldBlur} placeholder="e.g. P5" />
+            {pidError && <div className="field-error">{pidError}</div>}
           </div>
 
           <div className="field-grid-3">
             <div className="field">
               <label className="field-label" htmlFor="arr-field">Arrival</label>
-              <input id="arr-field" className="input" type="number" min={0} value={arrivalTime} onChange={(e) => setArrivalTime(parseInt(e.target.value, 10) || 0)} />
+              <input id="arr-field" className={`input ${arrivalError ? 'input-error' : ''}`} type="number" min={0} value={arrivalTime} onChange={(e) => { setArrivalTime(parseInt(e.target.value, 10) || 0); setArrivalError(''); }} onBlur={handleFieldBlur} />
+              {arrivalError && <div className="field-error">{arrivalError}</div>}
             </div>
             <div className="field">
               <label className="field-label" htmlFor="burst-field">Burst</label>
-              <input id="burst-field" className="input" type="number" min={1} value={burstTime} onChange={(e) => setBurstTime(parseInt(e.target.value, 10) || 1)} />
+              <input id="burst-field" className={`input ${burstError ? 'input-error' : ''}`} type="number" min={1} value={burstTime} onChange={(e) => { setBurstTime(parseInt(e.target.value, 10) || 1); setBurstError(''); }} onBlur={handleFieldBlur} />
+              {burstError && <div className="field-error">{burstError}</div>}
             </div>
             <div className="field">
               <label className="field-label" htmlFor="pri-field">Priority</label>
@@ -185,17 +396,6 @@ export const ProcessControlCenter: React.FC<ProcessControlCenterProps> = ({
               ))}
             </div>
           </div>
-
-          {errorMsg && (
-            <div className="form-error">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-                <circle cx="12" cy="12" r="10" />
-                <line x1="12" y1="8" x2="12" y2="12" />
-                <line x1="12" y1="16" x2="12" y2="16" />
-              </svg>
-              {errorMsg}
-            </div>
-          )}
 
           <button type="submit" className="btn btn-primary btn-block">
             <PlusIcon /> Add process
