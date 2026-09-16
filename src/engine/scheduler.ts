@@ -34,7 +34,6 @@ function validateProcesses(processes: Process[]): void {
   const pids = new Set<string>();
 
   processes.forEach((p) => {
-    // Check for duplicates
     if (pids.has(p.pid)) {
       throw new Error(`Duplicate process ID found: ${p.pid}`);
     }
@@ -55,7 +54,6 @@ function calculateMetrics(
 ): { results: ProcessResult[]; avgWait: number; avgTurnaround: number; avgResponse: number } {
   const resultMap = new Map<string, ProcessResult>();
 
-  // Initialize result map for each process
   processes.forEach((p) => {
     resultMap.set(p.pid, {
       pid: p.pid,
@@ -66,7 +64,6 @@ function calculateMetrics(
     });
   });
 
-  // Calculate completion time, response time for each process
   const firstExecution = new Map<string, number>();
   timeline.forEach((slice) => {
     if (slice.pid !== "idle") {
@@ -79,7 +76,6 @@ function calculateMetrics(
     }
   });
 
-  // Calculate response time and turnaround time
   processes.forEach((p) => {
     const result = resultMap.get(p.pid)!;
     const firstExec = firstExecution.get(p.pid) ?? 0;
@@ -87,7 +83,6 @@ function calculateMetrics(
     result.turnaroundTime = result.completionTime - p.arrivalTime;
   });
 
-  // Calculate waiting time
   processes.forEach((p) => {
     const result = resultMap.get(p.pid)!;
     result.waitingTime = result.turnaroundTime - p.burstTime;
@@ -122,7 +117,6 @@ export function fifo(processes: Process[]): SimulationResult {
   let processIndex = 0;
 
   while (processIndex < sorted.length || queue.length > 0) {
-    // Add all processes that have arrived
     while (processIndex < sorted.length && sorted[processIndex].arrivalTime <= currentTime) {
       queue.push(sorted[processIndex]);
       processIndex++;
@@ -136,7 +130,6 @@ export function fifo(processes: Process[]): SimulationResult {
       continue;
     }
 
-    // Process the first in queue
     const process = queue.shift()!;
     timeline.push({
       pid: process.pid,
@@ -176,13 +169,11 @@ export function sjf(processes: Process[]): SimulationResult {
   let currentTime = 0;
 
   while (remaining.size > 0) {
-    // Find all processes that have arrived by currentTime
     const available = processes.filter(
       (p) => p.arrivalTime <= currentTime && remaining.has(p.pid)
     );
 
     if (available.length === 0) {
-      // No process ready, jump to next arrival
       const nextArrival = Math.min(
         ...processes.filter((p) => remaining.has(p.pid)).map((p) => p.arrivalTime)
       );
@@ -190,7 +181,6 @@ export function sjf(processes: Process[]): SimulationResult {
       continue;
     }
 
-    // Pick the process with shortest burst time, break ties by PID
     const process = available.sort(
       (a, b) => a.burstTime - b.burstTime || a.pid.localeCompare(b.pid)
     )[0];
@@ -238,13 +228,11 @@ export function srtf(processes: Process[]): SimulationResult {
   let currentTime = 0;
 
   while (remaining.size > 0) {
-    // Find all processes that have arrived by currentTime
     const available = processInfo.filter(
       (p) => p.arrivalTime <= currentTime && remaining.has(p.pid)
     );
 
     if (available.length === 0) {
-      // No process ready, jump to next arrival
       const nextArrival = Math.min(
         ...processInfo.filter((p) => remaining.has(p.pid)).map((p) => p.arrivalTime)
       );
@@ -252,12 +240,10 @@ export function srtf(processes: Process[]): SimulationResult {
       continue;
     }
 
-    // Pick process with shortest remaining time, break ties by PID
     const process = available.sort(
       (a, b) => a.remaining - b.remaining || a.pid.localeCompare(b.pid)
     )[0];
 
-    // Run until next preempting event or completion
     let nextEventTime = currentTime + process.remaining;
     // Only preempt if an arriving process has strictly shorter remaining time
     const futureArrivals = processInfo
@@ -335,7 +321,6 @@ export function roundRobin(processes: Process[], options: RoundRobinOptions): Si
   let processIndex = 0;
 
   while (remaining.size > 0 || queue.length > 0) {
-    // Add all processes that have arrived by currentTime
     while (processIndex < processInfo.length && processInfo[processIndex].arrivalTime <= currentTime) {
       queue.push(processInfo[processIndex]);
       processIndex++;
@@ -348,19 +333,14 @@ export function roundRobin(processes: Process[], options: RoundRobinOptions): Si
       continue;
     }
 
-    // Dequeue first process
     const process = queue.shift()!;
     
-    // Determine how long to run this process
     let timeSlice = quantum;
     
     if (queue.length === 0) {
-      // Queue is empty - no competing processes right now
       if (processIndex >= processInfo.length) {
-        // No future arrivals either - run to completion
         timeSlice = process.remaining;
       } else {
-        // Future arrivals exist - compute time until next arrival
         const nextArrivalTime = processInfo[processIndex].arrivalTime;
         const timeUntilNextArrival = nextArrivalTime - currentTime;
         // Run either until process completes or until next arrival - whichever comes first
