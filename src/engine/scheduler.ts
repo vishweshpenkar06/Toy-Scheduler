@@ -48,9 +48,7 @@ function validateProcesses(processes: Process[]): void {
   });
 }
 
-/**
- * Helper: Calculate metrics for completed processes
- */
+Helper: Calculate metrics for completed processes
 function calculateMetrics(
   processes: Process[],
   timeline: TimelineSlice[]
@@ -103,9 +101,7 @@ function calculateMetrics(
   return { results, avgWait, avgTurnaround, avgResponse };
 }
 
-/**
- * FIFO: First Come First Served (non-preemptive)
- */
+FIFO: First Come First Served (non-preemptive)
 export function fifo(processes: Process[]): SimulationResult {
   validateProcesses(processes);
   
@@ -161,9 +157,7 @@ export function fifo(processes: Process[]): SimulationResult {
   };
 }
 
-/**
- * SJF: Shortest Job First (non-preemptive)
- */
+SJF: Shortest Job First (non-preemptive)
 export function sjf(processes: Process[]): SimulationResult {
   validateProcesses(processes);
   
@@ -221,9 +215,7 @@ export function sjf(processes: Process[]): SimulationResult {
   };
 }
 
-/**
- * SRTF: Shortest Remaining Time First (preemptive version of SJF)
- */
+SRTF: Shortest Remaining Time First (preemptive version of SJF)
 export function srtf(processes: Process[]): SimulationResult {
   validateProcesses(processes);
   
@@ -309,9 +301,7 @@ export function srtf(processes: Process[]): SimulationResult {
   };
 }
 
-/**
- * Round Robin scheduling (preemptive with fixed quantum)
- */
+Round Robin scheduling (preemptive with fixed quantum)
 export function roundRobin(processes: Process[], options: RoundRobinOptions): SimulationResult {
   validateProcesses(processes);
   
@@ -415,9 +405,7 @@ export function roundRobin(processes: Process[], options: RoundRobinOptions): Si
   };
 }
 
-/**
- * Priority Scheduling (both preemptive and non-preemptive)
- */
+Priority Scheduling (both preemptive and non-preemptive)
 export function priorityScheduling(
   processes: Process[],
   options: PrioritySchedulingOptions
