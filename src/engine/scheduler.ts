@@ -427,7 +427,6 @@ export function priorityScheduling(
     )[0];
 
     if (preemptive) {
-      // Preemptive: run until a higher-priority process arrives or completion
       let nextEventTime = currentTime + process.remaining;
       // Only preempt if an arriving process has strictly higher priority (lower number)
       const preemptingArrivals = processInfo.filter(
@@ -457,7 +456,6 @@ export function priorityScheduling(
 
       currentTime = nextEventTime;
     } else {
-      // Non-preemptive: run to completion
       timeline.push({
         pid: process.pid,
         start: currentTime,
