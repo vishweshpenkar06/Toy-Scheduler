@@ -347,7 +347,6 @@ export function roundRobin(processes: Process[], options: RoundRobinOptions): Si
         timeSlice = Math.min(process.remaining, timeUntilNextArrival);
       }
     } else {
-      // Other processes in queue - use normal quantum slicing
       timeSlice = Math.min(quantum, process.remaining);
     }
 
@@ -360,14 +359,12 @@ export function roundRobin(processes: Process[], options: RoundRobinOptions): Si
     currentTime += timeSlice;
     process.remaining -= timeSlice;
 
-    // Add newly arrived processes
     while (processIndex < processInfo.length && processInfo[processIndex].arrivalTime <= currentTime) {
       queue.push(processInfo[processIndex]);
       processIndex++;
     }
 
     if (process.remaining > 0) {
-      // Put back in queue if not done
       queue.push(process);
     } else {
       remaining.delete(process.pid);
@@ -413,13 +410,11 @@ export function priorityScheduling(
   let currentTime = 0;
 
   while (remaining.size > 0) {
-    // Find all processes that have arrived by currentTime
     const available = processInfo.filter(
       (p) => p.arrivalTime <= currentTime && remaining.has(p.pid)
     );
 
     if (available.length === 0) {
-      // No process ready, jump to next arrival
       const nextArrival = Math.min(
         ...processInfo.filter((p) => remaining.has(p.pid)).map((p) => p.arrivalTime)
       );
@@ -427,7 +422,6 @@ export function priorityScheduling(
       continue;
     }
 
-    // Pick process with highest priority (lowest number), break ties by PID
     const process = available.sort(
       (a, b) => a.priority - b.priority || a.pid.localeCompare(b.pid)
     )[0];
