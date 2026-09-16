@@ -518,7 +518,6 @@ export function priorityAgingScheduling(
       }
     }
 
-    // Find all processes that have arrived
     const available = processInfo.filter(
       (p) => p.arrivalTime <= currentTime && remaining.has(p.pid)
     );
@@ -532,12 +531,10 @@ export function priorityAgingScheduling(
       continue;
     }
 
-    // Pick process with highest priority (lowest number), break ties by PID
     const process = available.sort(
       (a, b) => a.effectivePriority - b.effectivePriority || a.pid.localeCompare(b.pid)
     )[0];
 
-    // Find the next event: either aging would promote someone else, or the process finishes
     let nextEventTime = currentTime + process.remaining;
 
     // Check if any waiting process could be promoted before this process finishes
