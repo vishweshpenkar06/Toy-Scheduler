@@ -57,16 +57,22 @@ export default function App() {
   const simulationResult: SimulationResult = useMemo(() => {
     if (processes.length === 0) return EMPTY_RESULT;
     try {
-      setSimError(null);
       const singleCore = runAlgorithm(algorithm, processes, { quantum });
       return runMultiCore(singleCore, coreCount);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Unknown simulation error';
-      console.error('Simulation calculation error:', err);
-      setSimError(msg);
       return EMPTY_RESULT;
     }
   }, [processes, algorithm, quantum, coreCount]);
+
+  useEffect(() => {
+    if (processes.length === 0) { setSimError(null); return; }
+    try {
+      runAlgorithm(algorithm, processes, { quantum });
+      setSimError(null);
+    } catch (err) {
+      setSimError(err instanceof Error ? err.message : 'Unknown simulation error');
+    }
+  }, [processes, algorithm, quantum]);
 
   const maxTime = useMemo(() => {
     if (simulationResult.timeline.length === 0) return 0;
@@ -193,16 +199,6 @@ export default function App() {
     }
     setShareUrlTooLong(false);
     navigator.clipboard.writeText(url).then(() => {
-      setShareCopied(true);
-      setTimeout(() => setShareCopied(false), 2000);
-    }).catch(() => {
-      // Fallback: copy to a temp input
-      const input = document.createElement('input');
-      input.value = url;
-      document.body.appendChild(input);
-      input.select();
-      document.execCommand('copy');
-      document.body.removeChild(input);
       setShareCopied(true);
       setTimeout(() => setShareCopied(false), 2000);
     });

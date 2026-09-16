@@ -1,4 +1,3 @@
-import React from 'react';
 import { AlgorithmType, AlgorithmInfo } from '../types';
 import { soundFx } from '../utils/audio';
 

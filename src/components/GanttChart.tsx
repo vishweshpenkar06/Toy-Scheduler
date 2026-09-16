@@ -1,20 +1,12 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { TimelineSlice, Process } from '../types';
+import { niceStep, buildColorMap } from '../utils/chartUtils';
 
 interface GanttChartProps {
   timeline: TimelineSlice[];
   processes: Process[];
   currentTimeStep: number;
   coreCount?: number;
-}
-
-function niceStep(max: number): number {
-  const raw = max / 10;
-  if (raw <= 0) return 1;
-  const mag = Math.pow(10, Math.floor(Math.log10(raw)));
-  const norm = raw / mag;
-  const step = norm <= 1 ? 1 : norm <= 2 ? 2 : norm <= 2.5 ? 2.5 : norm <= 5 ? 5 : 10;
-  return step * mag;
 }
 
 export const GanttChart: React.FC<GanttChartProps> = ({ timeline, processes, currentTimeStep, coreCount = 1 }) => {
@@ -33,8 +25,7 @@ export const GanttChart: React.FC<GanttChartProps> = ({ timeline, processes, cur
   }
 
   const totalTime = timeline[timeline.length - 1].end;
-  const colorMap = new Map<string, string>();
-  processes.forEach((p) => colorMap.set(p.pid, p.color ?? '#2154f0'));
+  const colorMap = buildColorMap(processes);
 
   // Group slices by core
   const numCores = Math.max(1, coreCount);
@@ -123,7 +114,7 @@ export const GanttChart: React.FC<GanttChartProps> = ({ timeline, processes, cur
                       const left = (slice.start / totalTime) * 100;
                       const width = (duration / totalTime) * 100;
                       const isIdle = slice.pid === 'idle';
-                      const color = isIdle ? 'transparent' : colorMap.get(slice.pid) ?? '#2154f0';
+                      const color = isIdle ? 'transparent' : (colorMap[slice.pid] ?? '#2154f0');
                       const isActive = currentTimeStep >= slice.start && currentTimeStep < slice.end;
                       const ariaLabel = isIdle
                         ? `CPU idle ${slice.start} to ${slice.end} milliseconds`

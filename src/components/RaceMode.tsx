@@ -1,7 +1,8 @@
-import React, { useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Process, SimulationResult, AlgorithmType } from '../types';
 import { runAlgorithm } from '../engine/scheduler';
 import { ALGORITHMS } from './Header';
+import { niceStep, buildColorMap } from '../utils/chartUtils';
 
 interface RaceModeProps {
   processes: Process[];
@@ -16,15 +17,6 @@ interface RaceEntry {
   result: SimulationResult;
   totalTime: number;
   isFinished: boolean;
-}
-
-function niceStep(max: number): number {
-  const raw = max / 10;
-  if (raw <= 0) return 1;
-  const mag = Math.pow(10, Math.floor(Math.log10(raw)));
-  const norm = raw / mag;
-  const step = norm <= 1 ? 1 : norm <= 2 ? 2 : norm <= 2.5 ? 2.5 : norm <= 5 ? 5 : 10;
-  return step * mag;
 }
 
 const MINI_TRACK_HEIGHT = 36;
@@ -60,8 +52,7 @@ export const RaceMode: React.FC<RaceModeProps> = ({ processes, quantum, currentT
   const bestTime = Math.min(...entries.map((e) => e.totalTime).filter((t) => t > 0));
   const bestEntry = entries.find((e) => Math.abs(e.totalTime - bestTime) < 0.001);
 
-  const colorMap = new Map<string, string>();
-  processes.forEach((p) => colorMap.set(p.pid, p.color ?? '#2154f0'));
+  const colorMap = buildColorMap(processes);
 
   const step = niceStep(globalMaxTime);
   const ticks: number[] = [];
@@ -173,7 +164,7 @@ export const RaceMode: React.FC<RaceModeProps> = ({ processes, quantum, currentT
 
                   {entry.result.timeline.map((slice, i) => {
                     const isIdle = slice.pid === 'idle';
-                    const color = isIdle ? 'transparent' : colorMap.get(slice.pid) ?? '#2154f0';
+                    const color = isIdle ? 'transparent' : (colorMap[slice.pid] ?? '#2154f0');
                     return (
                       <div
                         key={i}

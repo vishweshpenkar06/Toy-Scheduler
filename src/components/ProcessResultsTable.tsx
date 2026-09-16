@@ -1,20 +1,14 @@
-import React from 'react';
 import { ProcessResult, Process } from '../types';
+import { buildColorMap } from '../utils/chartUtils';
 
 interface ProcessResultsTableProps {
   results: ProcessResult[];
   processes: Process[];
 }
 
-export const ProcessResultsTable: React.FC<ProcessResultsTableProps> = ({ results, processes }) => {
-  const colorMap = new Map<string, string>();
-  const arrivalMap = new Map<string, number>();
-  const burstMap = new Map<string, number>();
-  processes.forEach((p) => {
-    colorMap.set(p.pid, p.color ?? '#2154f0');
-    arrivalMap.set(p.pid, p.arrivalTime);
-    burstMap.set(p.pid, p.burstTime);
-  });
+export const ProcessResultsTable = ({ results, processes }: ProcessResultsTableProps) => {
+  const colorMap = buildColorMap(processes);
+  const processMap = new Map(processes.map((p) => [p.pid, p]));
 
   return (
     <div className="card">
@@ -37,17 +31,17 @@ export const ProcessResultsTable: React.FC<ProcessResultsTableProps> = ({ result
           </thead>
           <tbody>
             {results.map((r) => {
-              const color = colorMap.get(r.pid) ?? '#2154f0';
+              const p = processMap.get(r.pid);
               return (
                 <tr key={r.pid}>
                   <td>
                     <span className="pill">
-                      <span className="pill-dot" style={{ background: color }} />
+                      <span className="pill-dot" style={{ background: colorMap[r.pid] }} />
                       {r.pid}
                     </span>
                   </td>
-                  <td className="num cell-muted">{arrivalMap.get(r.pid) ?? 0} ms</td>
-                  <td className="num cell-muted">{burstMap.get(r.pid) ?? 0} ms</td>
+                  <td className="num cell-muted">{p?.arrivalTime ?? 0} ms</td>
+                  <td className="num cell-muted">{p?.burstTime ?? 0} ms</td>
                   <td className="num">{r.completionTime} ms</td>
                   <td className="num">{r.turnaroundTime} ms</td>
                   <td className="num cell-accent">{r.waitingTime} ms</td>

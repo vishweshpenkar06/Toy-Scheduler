@@ -1,8 +1,9 @@
-import React, { useState, useRef } from 'react';
+import { useState, useRef } from 'react';
 import { Process } from '../types';
 import { soundFx } from '../utils/audio';
 import { validateProcessInput } from '../engine/scheduler';
 import { COLORS } from './Header';
+import { downloadFile } from '../utils/chartUtils';
 
 interface ProcessControlCenterProps {
   processes: Process[];
@@ -188,28 +189,11 @@ export const ProcessControlCenter: React.FC<ProcessControlCenterProps> = ({
     setPriority(1);
   };
 
-  const handleExportJSON = () => {
-    const data = JSON.stringify(processes, null, 2);
-    const blob = new Blob([data], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'workload.json';
-    a.click();
-    URL.revokeObjectURL(url);
-  };
-
+  const handleExportJSON = () => downloadFile(JSON.stringify(processes, null, 2), 'workload.json', 'application/json');
   const handleExportCSV = () => {
     const header = 'pid,arrivalTime,burstTime,priority';
     const rows = processes.map((p) => `${p.pid},${p.arrivalTime},${p.burstTime},${p.priority ?? ''}`);
-    const data = [header, ...rows].join('\n');
-    const blob = new Blob([data], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'workload.csv';
-    a.click();
-    URL.revokeObjectURL(url);
+    downloadFile([header, ...rows].join('\n'), 'workload.csv', 'text/csv');
   };
 
   const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
