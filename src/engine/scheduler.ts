@@ -505,10 +505,7 @@ export function priorityScheduling(
   };
 }
 
-/**
- * Priority Scheduling with Aging (prevents starvation)
- * Processes waiting longer get a priority boost at regular intervals.
- */
+
 export function priorityAgingScheduling(
   processes: Process[],
   options: PriorityAgingOptions
@@ -609,11 +606,7 @@ export function priorityAgingScheduling(
   };
 }
 
-/**
- * Multilevel Queue Scheduling
- * Processes are assigned to fixed queues based on priority bands.
- * Each queue uses FIFO. Higher-priority queues are served first.
- */
+
 export function multiLevelQueueScheduling(
   processes: Process[],
   options: MultiLevelQueueOptions
@@ -704,12 +697,7 @@ export function multiLevelQueueScheduling(
   };
 }
 
-/**
- * Multilevel Feedback Queue Scheduling
- * Processes start at the highest-priority level and may be demoted
- * based on CPU burst behavior. Each level uses Round Robin with
- * different quanta. Processes are promoted back up after aging.
- */
+
 export function multiLevelFeedbackQueueScheduling(
   processes: Process[],
   options: MultiLevelFeedbackOptions
@@ -848,10 +836,7 @@ export function multiLevelFeedbackQueueScheduling(
   };
 }
 
-/**
- * Uniform dispatcher: runs the given scheduling algorithm over a workload.
- * The default quantum is used for Round Robin when none is supplied.
- */
+
 export function runAlgorithm(
   algorithm: AlgorithmType,
   processes: Process[],
@@ -889,11 +874,7 @@ export function runAlgorithm(
   }
 }
 
-/**
- * Multi-core scheduling simulation.
- * Uses a global ready queue and dispatches to whichever core frees up next.
- * For coreCount=1, produces byte-identical output to single-core scheduling.
- */
+
 export function runMultiCore(
   singleCoreResult: SimulationResult,
   coreCount: number

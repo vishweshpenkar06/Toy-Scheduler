@@ -1,9 +1,5 @@
 import { Process, TimelineSlice, DecisionEntry } from '../types';
 
-/**
- * Generates a plain-English decision log for each time step.
- * Explains what the scheduler is doing at each slice.
- */
 export function generateDecisionLog(
   timeline: TimelineSlice[],
   processes: Process[],
