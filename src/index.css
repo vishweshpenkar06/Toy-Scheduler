@@ -918,13 +918,6 @@ select {
 /* -------------------------------------------------------------
    Gantt chart
    ------------------------------------------------------------- */
-.gantt-head {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  flex-wrap: wrap;
-}
-
 .gantt-legend {
   display: flex;
   flex-wrap: wrap;
@@ -1157,11 +1150,6 @@ select {
 
 .cell-accent {
   color: var(--accent);
-  font-weight: 700;
-}
-
-.cell-green {
-  color: var(--green);
   font-weight: 700;
 }
 
