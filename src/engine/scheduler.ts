@@ -507,7 +507,6 @@ export function priorityAgingScheduling(
   let currentTime = 0;
 
   while (remaining.size > 0) {
-    // Apply aging to all waiting processes
     for (const p of processInfo) {
       if (remaining.has(p.pid) && p.arrivalTime <= currentTime) {
         const timeSinceLastCheck = currentTime - p.lastAgingCheck;
