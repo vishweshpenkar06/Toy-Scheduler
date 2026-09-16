@@ -153,7 +153,7 @@ export const Header: React.FC<HeaderProps> = ({
           title="Copy shareable link"
           style={{ fontSize: 12 }}
         >
-          {shareCopied ? 'Copied!' : 'Share'}
+          {shareUrlTooLong ? 'Too long' : shareCopied ? 'Copied!' : 'Share'}
         </button>
         <button className="icon-btn" onClick={() => { soundFx.playClick(); onOpenPresets(); }} title="Load a preset workload" aria-label="Load a preset workload">
           <FolderIcon />
