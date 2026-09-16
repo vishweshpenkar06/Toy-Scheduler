@@ -62,9 +62,21 @@ const UploadIcon = () => (
   </svg>
 );
 
+interface ImportError {
+  row: number;
+  field: string;
+  message: string;
+}
+
+interface PendingImport {
+  processes: Process[];
+  errors: ImportError[];
+  duplicatePids: string[];
+}
+
 function parseCSV(text: string): Process[] {
   const lines = text.trim().split('\n');
-  if (lines.length < 2) return [];
+  if (lines.length < 1) return [];
   const header = lines[0].toLowerCase();
   const hasHeader = header.includes('pid') || header.includes('process');
   const dataLines = hasHeader ? lines.slice(1) : lines;
@@ -93,6 +105,25 @@ function parseJSON(text: string): Process[] {
   }));
 }
 
+function validateImport(processes: Process[]): { errors: ImportError[]; duplicatePids: string[] } {
+  const errors: ImportError[] = [];
+  const pids = new Set<string>();
+  const duplicates: string[] = [];
+
+  processes.forEach((p, idx) => {
+    const err = validateProcessInput(p);
+    if (err) {
+      errors.push({ row: idx + 1, field: 'process', message: err });
+    }
+    if (pids.has(p.pid)) {
+      duplicates.push(p.pid);
+    }
+    pids.add(p.pid);
+  });
+
+  return { errors, duplicatePids: duplicates };
+}
+
 export const ProcessControlCenter: React.FC<ProcessControlCenterProps> = ({
   processes,
   onAddProcess,
@@ -111,6 +142,7 @@ export const ProcessControlCenter: React.FC<ProcessControlCenterProps> = ({
   const [arrivalError, setArrivalError] = useState('');
   const [burstError, setBurstError] = useState('');
   const [importError, setImportError] = useState('');
+  const [pendingImport, setPendingImport] = useState<PendingImport | null>(null);
   const [showRandomSliders, setShowRandomSliders] = useState(false);
   const [randCount, setRandCount] = useState(5);
   const [randBurstMin, setRandBurstMin] = useState(2);
