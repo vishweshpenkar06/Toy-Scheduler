@@ -7,10 +7,7 @@ for future work.
 ## P1 — High Priority
 
 ### 1. Error banner for simulation failures (Phase 1, Item 3)
-The `simError` state and error banner were never implemented. Currently,
-`runAlgorithm` failures silently return `EMPTY_RESULT` with only a `console.error`.
-A visible error state + banner component is needed to surface engine errors to
-the user (e.g., invalid quantum, unexpected algorithm failure).
+**DONE.** `simError` state added to App.tsx. Visible error banner with dismiss button renders at top of visualizer view when simulation throws.
 
 ### 2. Modal focus management (Phase 1, Item 4)
 None of the three modals (Presets, Shortcuts, Onboarding) implement proper
@@ -26,21 +23,16 @@ for very large workloads.
 ## P2 — Medium Priority
 
 ### 4. CSV/JSON import per-row error reporting (Phase 2, Item 13)
-Currently shows only the first error. Should show per-row error messages
-with row numbers and specific field issues (like a linting report).
+**DONE.** `validateImport()` returns per-row `ImportError` objects with row number and field. Confirmation dialog shows all errors as a scrollable list.
 
 ### 5. Import confirmation dialog (Phase 2, Item 15)
-Import silently replaces the current workload. Should show a preview diff
-or confirmation prompt before committing, especially for large imports.
+**DONE.** `pendingImport` state holds parsed processes before committing. Confirmation dialog shows process count, current workload size, per-row validation errors, duplicate PIDs, and Confirm/Cancel buttons. Confirm is disabled when validation errors exist.
 
 ### 6. simError state + error banner (Phase 1, Item 3)
-`src/App.tsx` has a try/catch that only does `console.error`. Needs a
-`simError` state variable and a visible error banner component.
+**DONE.** `simError` state in App.tsx catches simulation errors from `runAlgorithm`/`runMultiCore`. Error banner renders at top of main content with a dismiss button.
 
 ### 7. URL length graceful degradation (Phase 2, Item 12)
-The permalink has no explicit URL length cap. For very large workloads
-(20 processes × ~50 chars), the base64 string could approach browser limits.
-Should show a warning or truncate gracefully.
+**DONE.** `encodeStateToURL` returns `null` when encoded URL exceeds 2000 chars (browser practical limit). `handleShare` shows "Too long" on the share button for 3 seconds. Also fixed `parseJSON` `Number() || 0` falsy-value bug (zeroes were coerced to defaults).
 
 ## P3 — Low Priority
 

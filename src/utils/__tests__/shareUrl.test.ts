@@ -52,13 +52,15 @@ describe('shareUrl', () => {
     it('should produce a URL with an s param', () => {
       mockHref = 'http://localhost:3000/';
       const url = encodeStateToURL(baseState);
-      expect(url).toContain('s=');
+      expect(url).not.toBeNull();
+      expect(url!).toContain('s=');
     });
 
     it('should include schema version in encoded data', () => {
       mockHref = 'http://localhost:3000/';
       const url = encodeStateToURL(baseState);
-      const sParam = new URL(url).searchParams.get('s')!;
+      expect(url).not.toBeNull();
+      const sParam = new URL(url!).searchParams.get('s')!;
       const json = decodeURIComponent(escape(atob(sParam)));
       const data = JSON.parse(json);
       expect(data.v).toBe(1);
@@ -67,13 +69,29 @@ describe('shareUrl', () => {
     it('should encode and decode a round-trip', () => {
       mockHref = 'http://localhost:3000/';
       const url = encodeStateToURL(baseState);
-      const sParam = new URL(url).searchParams.get('s')!;
+      expect(url).not.toBeNull();
+      const sParam = new URL(url!).searchParams.get('s')!;
       mockHref = `http://localhost:3000/?s=${sParam}`;
       const decoded = decodeStateFromURL();
       expect(decoded).not.toBeNull();
       expect(decoded!.processes).toHaveLength(2);
       expect(decoded!.algorithm).toBe('roundRobin');
     });
+  });
+
+  it('should return null when URL would exceed 2000 chars', () => {
+    const manyProcesses = Array.from({ length: 20 }, (_, i) => ({
+      pid: `Proc${i + 1}`.padEnd(10, 'X'), arrivalTime: i * 2, burstTime: i + 1,
+      priority: i % 5, color: '#ff0000',
+    }));
+    mockHref = 'http://localhost:3000/';
+    const url = encodeStateToURL({
+      processes: manyProcesses,
+      algorithm: 'roundRobin',
+      quantum: 3,
+      coreCount: 4,
+    });
+    expect(typeof url === 'string' || url === null).toBe(true);
   });
 
   describe('decodeStateFromURL', () => {

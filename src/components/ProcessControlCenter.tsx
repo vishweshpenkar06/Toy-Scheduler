@@ -98,9 +98,9 @@ function parseJSON(text: string): Process[] {
   const arr = Array.isArray(data) ? data : data.processes ?? [];
   return arr.map((p: Record<string, unknown>, idx: number) => ({
     pid: String(p.pid || `P${idx + 1}`).toUpperCase(),
-    arrivalTime: Number(p.arrivalTime) || 0,
-    burstTime: Number(p.burstTime) || 1,
-    priority: p.priority != null ? Number(p.priority) : undefined,
+    arrivalTime: typeof p.arrivalTime === 'number' ? p.arrivalTime : 0,
+    burstTime: typeof p.burstTime === 'number' ? p.burstTime : 1,
+    priority: p.priority != null && typeof p.priority === 'number' ? p.priority : undefined,
     color: String(p.color || COLOR_PALETTE[idx % COLOR_PALETTE.length]),
   }));
 }
