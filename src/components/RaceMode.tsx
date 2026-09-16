@@ -45,7 +45,7 @@ export const RaceMode: React.FC<RaceModeProps> = ({ processes, quantum, currentT
         isFinished: currentTimeStep >= totalTime,
       };
     });
-  }, [processes, quantum, currentTimeStep]);
+  }, [processes, quantum]);
 
   if (processes.length === 0) {
     return (

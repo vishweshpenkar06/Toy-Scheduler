@@ -19,7 +19,7 @@ export const KeyboardShortcutsModal: React.FC<KeyboardShortcutsModalProps> = ({ 
     { keys: 'Space', desc: 'Play / pause simulation' },
     { keys: '← / →', desc: 'Step back / forward by 1 ms' },
     { keys: 'R', desc: 'Reset playback to t = 0' },
-    { keys: '1 – 6', desc: 'Switch algorithm (FCFS, SJF, SRTF, RR, two priority modes)' },
+    { keys: '1 – 9', desc: 'Switch algorithm (FCFS, SJF, SRTF, RR, Priority NP/P, Priority+Aging, MLQ, MLFQ)' },
     { keys: 'C', desc: 'Toggle between visualizer and benchmark' },
   ];
 

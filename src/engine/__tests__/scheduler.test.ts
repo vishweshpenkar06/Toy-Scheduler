@@ -997,4 +997,18 @@ describe("Multi-Core Scheduling", () => {
     expect(twoCore.averageWaitingTime).toBe(singleCore.averageWaitingTime);
     expect(twoCore.averageTurnaroundTime).toBe(singleCore.averageTurnaroundTime);
   });
+
+  it("should produce deterministic output (same input -> same output)", () => {
+    const processes: Process[] = [
+      { pid: "P1", arrivalTime: 0, burstTime: 8 },
+      { pid: "P2", arrivalTime: 1, burstTime: 4 },
+      { pid: "P3", arrivalTime: 2, burstTime: 2 },
+    ];
+
+    const singleCore = roundRobin(processes, { quantum: 2 });
+    const run1 = runMultiCore(singleCore, 3);
+    const run2 = runMultiCore(singleCore, 3);
+
+    expect(run1.timeline).toEqual(run2.timeline);
+  });
 });

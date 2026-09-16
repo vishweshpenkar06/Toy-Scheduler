@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Process, SimulationResult, AlgorithmType } from '../types';
 import { runAlgorithm } from '../engine/scheduler';
 import { ALGORITHMS } from './Header';
@@ -30,18 +30,20 @@ export const AlgorithmLeaderboard: React.FC<AlgorithmLeaderboardProps> = ({ proc
     );
   }
 
-  const rows: RankedRow[] = ALGORITHMS.map((alg) => {
-    const result = runAlgorithm(alg.id, processes, { quantum });
-    return {
-      id: alg.id,
-      name: alg.name,
-      isPreemptive: alg.isPreemptive,
-      result,
-      avgWait: result.averageWaitingTime,
-      avgTurnaround: result.averageTurnaroundTime,
-      avgResponse: result.averageResponseTime,
-    };
-  }).sort((a, b) => a.avgWait - b.avgWait || a.name.localeCompare(b.name));
+  const rows: RankedRow[] = useMemo(() => {
+    return ALGORITHMS.map((alg) => {
+      const result = runAlgorithm(alg.id, processes, { quantum });
+      return {
+        id: alg.id,
+        name: alg.name,
+        isPreemptive: alg.isPreemptive,
+        result,
+        avgWait: result.averageWaitingTime,
+        avgTurnaround: result.averageTurnaroundTime,
+        avgResponse: result.averageResponseTime,
+      };
+    }).sort((a, b) => a.avgWait - b.avgWait || a.name.localeCompare(b.name));
+  }, [processes, quantum]);
 
   const maxWait = Math.max(...rows.map((r) => r.avgWait), 1);
   const minWait = Math.min(...rows.map((r) => r.avgWait));

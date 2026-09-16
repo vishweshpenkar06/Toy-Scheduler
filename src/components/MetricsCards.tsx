@@ -3,15 +3,16 @@ import { SimulationResult } from '../types';
 
 interface MetricsCardsProps {
   result: SimulationResult;
+  coreCount?: number;
 }
 
-export const MetricsCards: React.FC<MetricsCardsProps> = ({ result }) => {
+export const MetricsCards: React.FC<MetricsCardsProps> = ({ result, coreCount = 1 }) => {
   const { averageWaitingTime, averageTurnaroundTime, averageResponseTime, timeline } = result;
 
-  const totalSpan = timeline.length > 0 ? timeline[timeline.length - 1].end : 0;
+  const totalSpan = timeline.length > 0 ? Math.max(...timeline.map((s) => s.end)) : 0;
   const idleSpan = timeline.filter((s) => s.pid === 'idle').reduce((sum, s) => sum + (s.end - s.start), 0);
   const busySpan = totalSpan - idleSpan;
-  const cpuUtilization = totalSpan > 0 ? (busySpan / totalSpan) * 100 : 0;
+  const cpuUtilization = totalSpan > 0 ? (busySpan / (totalSpan * coreCount)) * 100 : 0;
 
   const stats: { label: string; value: string; unit: string; accent: string; foot: string }[] = [
     { label: 'Avg waiting', value: averageWaitingTime.toFixed(2), unit: 'ms', accent: 'var(--accent)', foot: 'Lower is better' },

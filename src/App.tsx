@@ -68,7 +68,7 @@ export default function App() {
 
   const maxTime = useMemo(() => {
     if (simulationResult.timeline.length === 0) return 0;
-    return simulationResult.timeline[simulationResult.timeline.length - 1].end;
+    return Math.max(...simulationResult.timeline.map((s) => s.end));
   }, [simulationResult]);
 
   // Reset playback when simulation inputs change
@@ -239,7 +239,7 @@ export default function App() {
           {viewMode === 'visualizer' ? (
             <div className="main-flow">
               <CpuMonitorHud timeline={simulationResult.timeline} processes={processes} currentTimeStep={currentTimeStep} />
-              <MetricsCards result={simulationResult} />
+              <MetricsCards result={simulationResult} coreCount={coreCount} />
               <PlaybackControls
                 isPlaying={isPlaying}
                 onTogglePlay={handleTogglePlay}

@@ -1,138 +1,61 @@
 # Toy Scheduler - Core Engine Summary
 
-## Project Setup ✓
-- **Framework**: Vite + React + TypeScript
-- **Testing**: Vitest configured with comprehensive test suite
+> **Last updated**: Verification & Hardening Pass (after 8-section upgrade)
+
+## Project Setup
+- **Framework**: Vite + React 19 + TypeScript
+- **Testing**: Vitest (85 tests, node environment)
+- **Package manager**: npm
 - **Styling**: Plain CSS (src/index.css)
-- **Structure**: 
+- **Structure**:
   - `/src/types.ts` - Core TypeScript interfaces
-  - `/src/engine/scheduler.ts` - All scheduling algorithms
-  - `/src/engine/__tests__/scheduler.test.ts` - Comprehensive unit tests
-  - `/src/components` - 11 UI components (Header, GanttChart, ProcessControlCenter, etc.)
+  - `/src/engine/scheduler.ts` - All 9 scheduling algorithms + multi-core
+  - `/src/engine/__tests__/scheduler.test.ts` - 68 engine tests
+  - `/src/utils/shareUrl.ts` - Permalink encode/decode
+  - `/src/utils/__tests__/shareUrl.test.ts` - 17 permalink tests
+  - `/src/components/` - 14 UI components
 
-## Scheduling Algorithms Implemented ✓
+## Scheduling Algorithms (9 total)
 
-### 1. FIFO (First Come First Served)
-- Non-preemptive scheduling
-- Processes execute in arrival order
-- Simple but can result in poor average waiting time
+| # | Algorithm | ID | Preemptive | Notes |
+|---|-----------|----|------------|-------|
+| 1 | FCFS | `fifo` | No | First-Come First-Served |
+| 2 | SJF | `sjf` | No | Shortest Job First |
+| 3 | SRTF | `srtf` | Yes | Shortest Remaining Time First |
+| 4 | Round Robin | `roundRobin` | Yes | Configurable quantum |
+| 5 | Priority (NP) | `priorityNonPreemptive` | No | Lower number = higher priority |
+| 6 | Priority (P) | `priorityPreemptive` | Yes | Preemptive priority |
+| 7 | Priority + Aging | `priorityAging` | Yes | Prevents starvation via aging |
+| 8 | Multilevel Queue | `multiLevelQueue` | No | Fixed priority bands, FIFO per level |
+| 9 | MLFQ | `multiLevelFeedback` | Yes | Feedback queue with demotion + aging |
 
-### 2. SJF (Shortest Job First)
-- Non-preemptive scheduling
-- Selects process with shortest burst time among ready processes
-- Better average waiting time than FIFO
-- Can lead to starvation of longer processes
+## Multi-Core Simulation
+- Supports 1-4 cores via global ready queue model
+- Single-core results are byte-identical to the original single-core output
+- Metrics preserved from single-core computation
+- Per-core idle gap detection in Gantt chart
 
-### 3. SRTF (Shortest Remaining Time First)
-- **Preemptive** version of SJF
-- Selects process with shortest remaining time
-- Can preempt currently running process if shorter job arrives
-- Generally produces best average waiting time
+## Test Coverage (85 tests)
 
-### 4. Round Robin
-- **Preemptive** scheduling with fixed time quantum
-- Each process gets equal CPU time per round
-- Fair scheduling but more context switches
-- Configurable quantum parameter
-
-### 5. Priority Scheduling
-- Supports both **preemptive** and **non-preemptive** modes
-- Lower priority number = higher priority
-- Non-preemptive: process runs to completion
-- Preemptive: higher priority process can interrupt current process
-
-## Core Types
-
-```typescript
-interface Process {
-  pid: string;
-  arrivalTime: number;
-  burstTime: number;
-  priority?: number; // For priority scheduling
-}
-
-interface ProcessResult {
-  pid: string;
-  waitingTime: number;
-  turnaroundTime: number;
-  responseTime: number;
-  completionTime: number;
-}
-
-interface SimulationResult {
-  timeline: TimelineSlice[];
-  processResults: ProcessResult[];
-  averageWaitingTime: number;
-  averageTurnaroundTime: number;
-  averageResponseTime: number;
-}
-```
-
-## Test Coverage ✓
-
-**Test Files**: 42 tests, all passing
-
-### Test Categories:
-1. **FIFO Tests** (3 tests)
-   - Basic 3-process with staggered arrivals
-   - Single process
-   - Empty process list
-
-2. **SJF Tests** (3 tests)
-   - Classic SJF example
-   - Starvation demonstration
-   - Tie-breaking by PID
-
-3. **SRTF Tests** (3 tests)
-   - Preemption demonstration
-   - Multiple preemptions
-   - Single process (no preemption)
-
-4. **Round Robin Tests** (4 tests)
-   - Context switching with quantum=2
-   - Same process multiple times
-   - Arrival time respect
-   - Empty process list
-
-5. **Priority Tests** (4 tests)
-   - Non-preemptive priority
-   - Preemptive priority
-   - Default priority handling
-   - Tie-breaking by PID
-
-6. **Edge Cases** (4 tests)
-   - Identical arrival times
-   - Zero-wait scenarios
-   - Large gaps between processes
-   - Determinism verification
-
-7. **Comparisons** (2 tests)
-   - FIFO vs SJF differences
-   - Preemptive vs non-preemptive priority
+- **Engine tests**: 68 (scheduler.test.ts)
+- **Permalink tests**: 17 (shareUrl.test.ts)
+- **Component tests**: 0 (gap)
 
 ## Key Features
-
-✓ **Framework-agnostic** - Pure TypeScript, no React dependencies
-✓ **Deterministic** - Same input always produces same output
-✓ **Discrete-time simulation** - No wall-clock time dependencies
-✓ **Comprehensive metrics** - Waiting, turnaround, response, completion times
-✓ **Idle timeline tracking** - Shows CPU idle periods
-✓ **PID-based tie-breaking** - Consistent, predictable results
+- Deterministic scheduling (same input → same output)
+- Discrete-time simulation
+- Comprehensive metrics (waiting, turnaround, response, completion)
+- Shareable permalinks (base64-encoded URL state)
+- CSV/JSON import/export for workloads
+- Race mode (all 9 algorithms animated simultaneously)
+- Step-by-step "why" explanations
+- 3-step onboarding modal
+- Responsive layout (960px, 640px breakpoints)
+- Keyboard shortcuts (Space, arrows, R, C, 1-9)
 
 ## Running Tests
 
 ```bash
-pnpm test           # Run all tests
-pnpm test:ui        # Run with Vitest UI
+npx vitest run           # Run all tests
+npm run build            # TypeScript check + production build
 ```
-
-## Current Status
-
-The engine is complete, fully tested, and integrated into the UI:
-
-1. **Gantt Chart Renderer** ✓ — Interactive timeline with animated playback, hover/focus tooltips, and idle-gap visualization.
-2. **Process Input Form** ✓ — Full process control center with add/remove, color picker, random generation, and preset workloads.
-3. **Algorithm Comparison Dashboard** ✓ — Side-by-side leaderboard comparing all six algorithms on the same workload.
-4. **Interactive Controls** ✓ — Play/pause, step forward/back, speed control, keyboard shortcuts, and sound effects.
-5. **Responsive Layout** ✓ — Mobile-friendly breakpoints at 960px and 640px with horizontal-scroll algorithm nav.
-6. **Accessibility** ✓ — Keyboard-navigable Gantt blocks, focus-visible states, and aria-labels on icon buttons.

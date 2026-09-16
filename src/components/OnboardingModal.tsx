@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { soundFx } from '../utils/audio';
 
 interface OnboardingModalProps {
@@ -25,7 +25,22 @@ const steps = [
 
 export const OnboardingModal: React.FC<OnboardingModalProps> = ({ onClose }) => {
   const [step, setStep] = useState(0);
+  const closeRef = useRef<HTMLButtonElement>(null);
+  const prevFocusRef = useRef<HTMLElement | null>(null);
   const current = steps[step];
+
+  useEffect(() => {
+    prevFocusRef.current = document.activeElement as HTMLElement;
+    closeRef.current?.focus();
+    const handleEsc = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', handleEsc);
+    return () => {
+      document.removeEventListener('keydown', handleEsc);
+      prevFocusRef.current?.focus();
+    };
+  }, [onClose]);
 
   const handleNext = () => {
     soundFx.playClick();
@@ -43,7 +58,14 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({ onClose }) => 
 
   return (
     <div className="overlay" onClick={handleSkip}>
-      <div className="modal" style={{ maxWidth: 420 }} onClick={(e) => e.stopPropagation()}>
+      <div
+        className="modal"
+        style={{ maxWidth: 420 }}
+        onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Getting started"
+      >
         <div className="modal-body" style={{ padding: '28px 24px 20px', textAlign: 'center' }}>
           <div style={{
             width: 48,
@@ -117,7 +139,7 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({ onClose }) => 
               />
             ))}
           </div>
-          <button className="btn btn-primary" onClick={handleNext}>
+          <button ref={closeRef} className="btn btn-primary" onClick={handleNext}>
             {step < steps.length - 1 ? 'Next' : 'Get started'}
           </button>
         </div>
