@@ -47,7 +47,6 @@ function validateProcesses(processes: Process[]): void {
   });
 }
 
-Helper: Calculate metrics for completed processes
 function calculateMetrics(
   processes: Process[],
   timeline: TimelineSlice[]
@@ -96,7 +95,6 @@ function calculateMetrics(
   return { results, avgWait, avgTurnaround, avgResponse };
 }
 
-FIFO: First Come First Served (non-preemptive)
 export function fifo(processes: Process[]): SimulationResult {
   validateProcesses(processes);
   
@@ -123,7 +121,6 @@ export function fifo(processes: Process[]): SimulationResult {
     }
 
     if (queue.length === 0) {
-      // No process ready, jump to next arrival
       if (processIndex < sorted.length) {
         currentTime = sorted[processIndex].arrivalTime;
       }
@@ -150,7 +147,6 @@ export function fifo(processes: Process[]): SimulationResult {
   };
 }
 
-SJF: Shortest Job First (non-preemptive)
 export function sjf(processes: Process[]): SimulationResult {
   validateProcesses(processes);
   
@@ -205,7 +201,6 @@ export function sjf(processes: Process[]): SimulationResult {
   };
 }
 
-SRTF: Shortest Remaining Time First (preemptive version of SJF)
 export function srtf(processes: Process[]): SimulationResult {
   validateProcesses(processes);
   
@@ -287,13 +282,11 @@ export function srtf(processes: Process[]): SimulationResult {
   };
 }
 
-Round Robin scheduling (preemptive with fixed quantum)
 export function roundRobin(processes: Process[], options: RoundRobinOptions): SimulationResult {
   validateProcesses(processes);
   
   const { quantum } = options;
   
-  // Validate quantum
   if (quantum <= 0 || !Number.isInteger(quantum)) {
     throw new Error(`Invalid quantum: must be a positive integer, got ${quantum}`);
   }
@@ -382,7 +375,6 @@ export function roundRobin(processes: Process[], options: RoundRobinOptions): Si
   };
 }
 
-Priority Scheduling (both preemptive and non-preemptive)
 export function priorityScheduling(
   processes: Process[],
   options: PrioritySchedulingOptions
@@ -703,7 +695,6 @@ export function multiLevelFeedbackQueueScheduling(
   );
 
   while (remaining.size > 0) {
-    // Add newly arrived processes to level 0
     while (processIndex < sortedByArrival.length && sortedByArrival[processIndex].arrivalTime <= currentTime) {
       const p = sortedByArrival[processIndex];
       p.level = 0;
@@ -711,7 +702,6 @@ export function multiLevelFeedbackQueueScheduling(
       processIndex++;
     }
 
-    // Find the highest-priority non-empty queue
     let selectedLevel = -1;
     for (let i = 0; i < numLevels; i++) {
       if (queues[i].length > 0) {
@@ -727,7 +717,6 @@ export function multiLevelFeedbackQueueScheduling(
       continue;
     }
 
-    // Aging: promote processes that have waited too long
     for (let i = numLevels - 1; i > 0; i--) {
       for (let j = queues[i].length - 1; j >= 0; j--) {
         const p = queues[i][j];
@@ -739,7 +728,6 @@ export function multiLevelFeedbackQueueScheduling(
       }
     }
 
-    // Re-find highest non-empty level after aging
     selectedLevel = -1;
     for (let i = 0; i < numLevels; i++) {
       if (queues[i].length > 0) {
@@ -770,7 +758,6 @@ export function multiLevelFeedbackQueueScheduling(
     process.lastServedTime = currentTime;
     process.timesSliced++;
 
-    // Add newly arrived processes
     while (processIndex < sortedByArrival.length && sortedByArrival[processIndex].arrivalTime <= currentTime) {
       const p = sortedByArrival[processIndex];
       p.level = 0;
@@ -780,12 +767,10 @@ export function multiLevelFeedbackQueueScheduling(
 
     if (process.remaining > 0) {
       if (process.timesSliced >= demotionThreshold && selectedLevel < numLevels - 1) {
-        // Demote to lower-priority queue
         process.level = selectedLevel + 1;
         process.timesSliced = 0;
         queues[selectedLevel + 1].push(process);
       } else {
-        // Stay at current level
         queues[selectedLevel].push(process);
       }
     } else {
@@ -862,7 +847,6 @@ export function runMultiCore(
       continue;
     }
 
-    // Find the core that frees up earliest
     let bestCore = 0;
     let bestTime = coreFreeAt[0];
     for (let c = 1; c < coreCountCapped; c++) {

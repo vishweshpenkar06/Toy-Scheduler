@@ -1,26 +1,43 @@
 # Quantum Scheduler
 
-An interactive CPU scheduling algorithm visualizer supporting FIFO (FCFS), SJF, SRTF, Round Robin, and Priority preemptive/non-preemptive algorithms. Build workloads, step through execution, and compare algorithms side by side.
+Interactive CPU scheduling algorithm visualizer. Build workloads, step through execution, and compare 9 algorithms side by side.
+
+## Algorithms
+
+| # | Algorithm | ID | Preemptive | Notes |
+|---|-----------|----|------------|-------|
+| 1 | FCFS | `fifo` | No | First-Come First-Served |
+| 2 | SJF | `sjf` | No | Shortest Job First |
+| 3 | SRTF | `srtf` | Yes | Shortest Remaining Time First |
+| 4 | Round Robin | `roundRobin` | Yes | Configurable quantum |
+| 5 | Priority (NP) | `priorityNonPreemptive` | No | Lower number = higher priority |
+| 6 | Priority (P) | `priorityPreemptive` | Yes | Preemptive priority |
+| 7 | Priority + Aging | `priorityAging` | Yes | Prevents starvation via aging |
+| 8 | Multilevel Queue | `multiLevelQueue` | No | Fixed priority bands, FIFO per level |
+| 9 | MLFQ | `multiLevelFeedback` | Yes | Feedback queue with demotion + aging |
+
+## Features
+
+- Animated Gantt timeline with playback controls (play, pause, step, speed)
+- Multi-core simulation (1–4 cores, global ready queue)
+- Algorithm comparison leaderboard and race mode (all 9 simultaneously)
+- Step-by-step "why" explanations for each scheduling decision
+- Preset workloads, random generation, CSV/JSON import/export
+- Shareable permalinks (base64-encoded URL state)
+- Keyboard shortcuts: Space (play), ←/→ (step), R (reset), 1–9 (algorithm), C (view)
+- Sound effects with mute toggle
+- Responsive layout (mobile, tablet, desktop)
+- Native `<dialog>` modals with built-in focus trapping
 
 ## Setup
 
 ```bash
 npm install
-npm run dev
-npm test
-npm run build
+npm run dev       # Dev server
+npm test          # Run all 86 tests
+npm run build     # TypeScript + production build
 ```
-
-## Features
-
-- Animated Gantt timeline with playback controls (play, pause, step, speed)
-- Preset workloads and random workload generation
-- Algorithm comparison leaderboard (run all algorithms on the same workload)
-- Keyboard shortcuts (Space, Arrow keys, 1–6 for algorithms, R, C)
-- Sound effects with mute toggle
-- Responsive layout for mobile, tablet, and desktop
-- Keyboard-navigable Gantt blocks with focus-visible states
 
 ## Tech Stack
 
-Vite · React 19 · TypeScript · Vitest
+Vite · React 19 · TypeScript · Vitest · Plain CSS

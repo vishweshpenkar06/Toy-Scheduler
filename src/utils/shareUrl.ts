@@ -1,12 +1,8 @@
 import { Process, AlgorithmType } from '../types';
+import { ALGORITHMS } from '../components/Header';
 import { validateProcessInput } from '../engine/scheduler';
 
-const VALID_ALGORITHMS: ReadonlySet<string> = new Set<AlgorithmType>([
-  'fifo', 'sjf', 'srtf', 'roundRobin',
-  'priorityNonPreemptive', 'priorityPreemptive',
-  'priorityAging', 'multiLevelQueue', 'multiLevelFeedback',
-]);
-
+const VALID_ALGORITHMS = new Set(ALGORITHMS.map((a) => a.id));
 const MAX_PROCESSES = 20;
 const SCHEMA_VERSION = 1;
 
