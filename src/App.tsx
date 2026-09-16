@@ -40,6 +40,7 @@ export default function App() {
   const [viewMode, setViewMode] = useState<'visualizer' | 'comparison' | 'race'>('visualizer');
   const [soundEnabled, setSoundEnabled] = useState<boolean>(true);
   const [shareCopied, setShareCopied] = useState<boolean>(false);
+  const [shareUrlTooLong, setShareUrlTooLong] = useState<boolean>(false);
 
   const [isPresetsOpen, setIsPresetsOpen] = useState<boolean>(false);
   const [isShortcutsOpen, setIsShortcutsOpen] = useState<boolean>(false);
@@ -54,14 +55,18 @@ export default function App() {
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
   const [currentTimeStep, setCurrentTimeStep] = useState<number>(0);
   const [playbackSpeed, setPlaybackSpeed] = useState<number>(1);
+  const [simError, setSimError] = useState<string | null>(null);
 
   const simulationResult: SimulationResult = useMemo(() => {
     if (processes.length === 0) return EMPTY_RESULT;
     try {
+      setSimError(null);
       const singleCore = runAlgorithm(algorithm, processes, { quantum });
       return runMultiCore(singleCore, coreCount);
     } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Unknown simulation error';
       console.error('Simulation calculation error:', err);
+      setSimError(msg);
       return EMPTY_RESULT;
     }
   }, [processes, algorithm, quantum, coreCount]);
@@ -183,6 +188,13 @@ export default function App() {
 
   const handleShare = useCallback(() => {
     const url = encodeStateToURL({ processes, algorithm, quantum, coreCount });
+    if (!url) {
+      setShareUrlTooLong(true);
+      setShareCopied(false);
+      setTimeout(() => setShareUrlTooLong(false), 3000);
+      return;
+    }
+    setShareUrlTooLong(false);
     navigator.clipboard.writeText(url).then(() => {
       setShareCopied(true);
       setTimeout(() => setShareCopied(false), 2000);
@@ -218,6 +230,7 @@ export default function App() {
           soundFx.enabled = !soundEnabled;
         }}
         shareCopied={shareCopied}
+        shareUrlTooLong={shareUrlTooLong}
         onShare={handleShare}
       />
 
@@ -236,6 +249,23 @@ export default function App() {
         </aside>
 
         <main className="main">
+          {simError && (
+            <div className="form-error" style={{ marginBottom: 12, fontSize: 12 }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                <circle cx="12" cy="12" r="10" />
+                <line x1="12" y1="8" x2="12" y2="12" />
+                <line x1="12" y1="16" x2="12" y2="16" />
+              </svg>
+              <span><strong>Simulation error:</strong> {simError}</span>
+              <button
+                className="btn btn-quiet"
+                style={{ marginLeft: 'auto', fontSize: 11, padding: '2px 6px' }}
+                onClick={() => setSimError(null)}
+              >
+                Dismiss
+              </button>
+            </div>
+          )}
           {viewMode === 'visualizer' ? (
             <div className="main-flow">
               <CpuMonitorHud timeline={simulationResult.timeline} processes={processes} currentTimeStep={currentTimeStep} />

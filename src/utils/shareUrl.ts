@@ -17,7 +17,7 @@ interface ShareableState {
   coreCount: number;
 }
 
-export function encodeStateToURL(state: ShareableState): string {
+export function encodeStateToURL(state: ShareableState): string | null {
   const data = {
     v: SCHEMA_VERSION,
     p: state.processes.map((proc) => ({
@@ -36,6 +36,10 @@ export function encodeStateToURL(state: ShareableState): string {
   const encoded = btoa(unescape(encodeURIComponent(json)));
   const url = new URL(window.location.href);
   url.searchParams.set('s', encoded);
+
+  // Browser practical limit for URL sharing is ~2000 chars
+  if (url.toString().length > 2000) return null;
+
   return url.toString();
 }
 

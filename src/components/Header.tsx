@@ -28,6 +28,7 @@ interface HeaderProps {
   soundEnabled: boolean;
   onToggleSound: () => void;
   shareCopied: boolean;
+  shareUrlTooLong: boolean;
   onShare: () => void;
 }
 
@@ -79,6 +80,7 @@ export const Header: React.FC<HeaderProps> = ({
   soundEnabled,
   onToggleSound,
   shareCopied,
+  shareUrlTooLong,
   onShare,
 }) => {
   return (
