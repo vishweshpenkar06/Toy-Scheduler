@@ -234,34 +234,26 @@ export const ProcessControlCenter: React.FC<ProcessControlCenterProps> = ({
           return;
         }
 
-        // Validate each process
-        const errors: string[] = [];
-        imported.forEach((p) => {
-          const err = validateProcessInput(p);
-          if (err) errors.push(err);
-        });
-        if (errors.length > 0) {
-          setImportError(errors[0]);
-          return;
-        }
-
-        // Check for duplicates
-        const pids = new Set<string>();
-        for (const p of imported) {
-          if (pids.has(p.pid)) {
-            setImportError(`Duplicate PID "${p.pid}" in imported data.`);
-            return;
-          }
-          pids.add(p.pid);
-        }
-
-        onImportProcesses(imported);
+        const { errors, duplicatePids } = validateImport(imported);
+        setPendingImport({ processes: imported, errors, duplicatePids });
       } catch {
         setImportError('Failed to parse file. Check format (JSON or CSV).');
       }
     };
     reader.readAsText(file);
     e.target.value = '';
+  };
+
+  const handleConfirmImport = () => {
+    if (!pendingImport) return;
+    soundFx.playClick();
+    onImportProcesses(pendingImport.processes);
+    setPendingImport(null);
+  };
+
+  const handleCancelImport = () => {
+    soundFx.playClick();
+    setPendingImport(null);
   };
 
   const handleGenerateWithSliders = () => {
@@ -319,6 +311,59 @@ export const ProcessControlCenter: React.FC<ProcessControlCenterProps> = ({
           <div style={{ padding: '6px 12px' }}>
             <div className="form-error" style={{ fontSize: 11 }}>
               {importError}
+            </div>
+          </div>
+        )}
+
+        {/* Import confirmation dialog */}
+        {pendingImport && (
+          <div style={{ padding: '10px 12px', borderBottom: '1px solid var(--border)' }}>
+            <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 6 }}>
+              Import {pendingImport.processes.length} process{pendingImport.processes.length !== 1 ? 'es' : ''}?
+            </div>
+            <div style={{ fontSize: 11, color: 'var(--text-2)', marginBottom: 6 }}>
+              This will replace your current workload of {processes.length} process{processes.length !== 1 ? 'es' : ''}.
+            </div>
+
+            {pendingImport.errors.length > 0 && (
+              <div style={{ marginBottom: 6 }}>
+                <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--red)', marginBottom: 4 }}>
+                  {pendingImport.errors.length} validation error{pendingImport.errors.length !== 1 ? 's' : ''}:
+                </div>
+                <div style={{ maxHeight: 100, overflowY: 'auto', fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-2)' }}>
+                  {pendingImport.errors.map((err, i) => (
+                    <div key={i} style={{ padding: '2px 0' }}>
+                      Row {err.row}: {err.message}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {pendingImport.duplicatePids.length > 0 && (
+              <div style={{ marginBottom: 6 }}>
+                <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--amber)', marginBottom: 4 }}>
+                  Duplicate PIDs: {pendingImport.duplicatePids.join(', ')}
+                </div>
+              </div>
+            )}
+
+            <div style={{ display: 'flex', gap: 6 }}>
+              <button
+                className="btn btn-primary"
+                style={{ fontSize: 11, padding: '4px 10px' }}
+                onClick={handleConfirmImport}
+                disabled={pendingImport.errors.length > 0}
+              >
+                Confirm import
+              </button>
+              <button
+                className="btn btn-ghost"
+                style={{ fontSize: 11, padding: '4px 10px' }}
+                onClick={handleCancelImport}
+              >
+                Cancel
+              </button>
             </div>
           </div>
         )}
