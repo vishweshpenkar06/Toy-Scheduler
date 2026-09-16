@@ -5,13 +5,12 @@ import { PRESET_WORKLOADS } from './data/presets';
 import { soundFx } from './utils/audio';
 import { encodeStateToURL, decodeStateFromURL } from './utils/shareUrl';
 
-import { Header, ALGORITHMS } from './components/Header';
+import { Header, ALGORITHMS, COLORS } from './components/Header';
 import { CpuMonitorHud } from './components/CpuMonitorHud';
 import { ReadyQueueHud } from './components/ReadyQueueHud';
 import { ProcessControlCenter } from './components/ProcessControlCenter';
 import { GanttChart } from './components/GanttChart';
 import { PlaybackControls } from './components/PlaybackControls';
-import { MetricsCards } from './components/MetricsCards';
 import { ProcessResultsTable } from './components/ProcessResultsTable';
 import { AlgorithmLeaderboard } from './components/AlgorithmLeaderboard';
 import { RaceMode } from './components/RaceMode';
@@ -19,8 +18,6 @@ import { ExplanationBar } from './components/ExplanationBar';
 import { PresetsModal } from './components/PresetsModal';
 import { OnboardingModal } from './components/OnboardingModal';
 import { KeyboardShortcutsModal } from './components/KeyboardShortcutsModal';
-
-const RANDOM_COLORS = ['#2563eb', '#0ea5e9', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#64748b'];
 
 const EMPTY_RESULT: SimulationResult = {
   timeline: [],
@@ -174,7 +171,7 @@ export default function App() {
       arrivalTime: idx === 0 ? 0 : Math.floor(Math.random() * 8),
       burstTime: Math.floor(Math.random() * 8) + 2,
       priority: Math.floor(Math.random() * 5),
-      color: RANDOM_COLORS[idx % RANDOM_COLORS.length],
+      color: COLORS[idx % COLORS.length],
     }));
     setProcesses(generated);
   };
@@ -269,7 +266,27 @@ export default function App() {
           {viewMode === 'visualizer' ? (
             <div className="main-flow">
               <CpuMonitorHud timeline={simulationResult.timeline} processes={processes} currentTimeStep={currentTimeStep} />
-              <MetricsCards result={simulationResult} coreCount={coreCount} />
+              <div className="stat-grid">
+                {(() => {
+                  const { averageWaitingTime, averageTurnaroundTime, averageResponseTime, timeline } = simulationResult;
+                  const totalSpan = timeline.length > 0 ? Math.max(...timeline.map((s) => s.end)) : 0;
+                  const idleSpan = timeline.filter((s) => s.pid === 'idle').reduce((sum, s) => sum + (s.end - s.start), 0);
+                  const busySpan = totalSpan - idleSpan;
+                  const cpuUtilization = totalSpan > 0 ? (busySpan / (totalSpan * coreCount)) * 100 : 0;
+                  return [
+                    { label: 'Avg waiting', value: averageWaitingTime.toFixed(2), unit: 'ms', accent: 'var(--accent)', foot: 'Lower is better' },
+                    { label: 'Turnaround', value: averageTurnaroundTime.toFixed(2), unit: 'ms', accent: 'var(--text-1)', foot: 'Completion − arrival' },
+                    { label: 'Response', value: averageResponseTime.toFixed(2), unit: 'ms', accent: 'var(--text-1)', foot: 'First CPU acquisition' },
+                    { label: 'CPU utilization', value: cpuUtilization.toFixed(1), unit: '%', accent: 'var(--green)', foot: 'Busy / total span' },
+                  ].map((s) => (
+                    <div key={s.label} className="stat" style={{ '--stat-accent': s.accent } as React.CSSProperties}>
+                      <div className="stat-label">{s.label}</div>
+                      <div className="stat-value">{s.value}<span className="stat-unit">{s.unit}</span></div>
+                      <div className="stat-foot">{s.foot}</div>
+                    </div>
+                  ));
+                })()}
+              </div>
               <PlaybackControls
                 isPlaying={isPlaying}
                 onTogglePlay={handleTogglePlay}

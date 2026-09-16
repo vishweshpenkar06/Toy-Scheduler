@@ -1350,50 +1350,33 @@ select {
 }
 
 /* -------------------------------------------------------------
-   Modals
+   Modals (native <dialog>)
    ------------------------------------------------------------- */
-.overlay {
-  position: fixed;
-  inset: 0;
-  background: var(--overlay);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 20px;
-  z-index: 100;
-  animation: fade-in 0.18s var(--ease);
-}
-
-@keyframes fade-in {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
-}
-
-.modal {
+.modal-dialog {
   background: var(--surface);
+  border: none;
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-lg);
   width: 100%;
   max-width: 560px;
   max-height: calc(100vh - 48px);
-  display: flex;
-  flex-direction: column;
+  padding: 0;
   animation: rise-in 0.2s var(--ease);
 }
 
+.modal-dialog::backdrop {
+  background: var(--overlay);
+  animation: fade-in 0.18s var(--ease);
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
 @keyframes rise-in {
-  from {
-    transform: translateY(8px);
-    opacity: 0;
-  }
-  to {
-    transform: none;
-    opacity: 1;
-  }
+  from { transform: translateY(8px); opacity: 0; }
+  to { transform: none; opacity: 1; }
 }
 
 .modal-head {
@@ -1696,7 +1679,7 @@ select:focus:not(:focus-visible) {
     width: 80px;
   }
 
-  .modal {
+  .modal-dialog {
     max-width: calc(100vw - 20px);
   }
 }

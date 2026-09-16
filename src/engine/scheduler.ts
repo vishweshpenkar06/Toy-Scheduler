@@ -11,10 +11,6 @@ import {
   AlgorithmType,
 } from "../types";
 
-/**
- * Validate a single process entry: returns an error message or null if valid.
- * Mirrors `validateProcesses` so UI and engine enforce identical rules.
- */
 export function validateProcessInput(p: Process): string | null {
   if (!p.pid || !p.pid.trim()) {
     return 'Process ID is required.';
@@ -34,9 +30,6 @@ export function validateProcessInput(p: Process): string | null {
   return null;
 }
 
-/**
- * Validate process array: check for duplicates and invalid values
- */
 function validateProcesses(processes: Process[]): void {
   const pids = new Set<string>();
 

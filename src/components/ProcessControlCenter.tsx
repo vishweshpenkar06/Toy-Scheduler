@@ -2,8 +2,7 @@ import React, { useState, useRef } from 'react';
 import { Process } from '../types';
 import { soundFx } from '../utils/audio';
 import { validateProcessInput } from '../engine/scheduler';
-
-const COLOR_PALETTE = ['#2563eb', '#0ea5e9', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#64748b'];
+import { COLORS } from './Header';
 
 interface ProcessControlCenterProps {
   processes: Process[];
@@ -89,7 +88,7 @@ function parseCSV(text: string): Process[] {
       const arrivalTime = parseInt(cols[1], 10) || 0;
       const burstTime = parseInt(cols[2], 10) || 1;
       const priority = cols[3] ? parseInt(cols[3], 10) : undefined;
-      return { pid: pid.toUpperCase(), arrivalTime, burstTime, priority, color: COLOR_PALETTE[idx % COLOR_PALETTE.length] };
+      return { pid: pid.toUpperCase(), arrivalTime, burstTime, priority, color: COLORS[idx % COLORS.length] };
     });
 }
 
@@ -101,7 +100,7 @@ function parseJSON(text: string): Process[] {
     arrivalTime: typeof p.arrivalTime === 'number' ? p.arrivalTime : 0,
     burstTime: typeof p.burstTime === 'number' ? p.burstTime : 1,
     priority: p.priority != null && typeof p.priority === 'number' ? p.priority : undefined,
-    color: String(p.color || COLOR_PALETTE[idx % COLOR_PALETTE.length]),
+    color: String(p.color || COLORS[idx % COLORS.length]),
   }));
 }
 
@@ -137,7 +136,7 @@ export const ProcessControlCenter: React.FC<ProcessControlCenterProps> = ({
   const [arrivalTime, setArrivalTime] = useState(0);
   const [burstTime, setBurstTime] = useState(4);
   const [priority, setPriority] = useState(1);
-  const [selectedColor, setSelectedColor] = useState(COLOR_PALETTE[processes.length % COLOR_PALETTE.length]);
+  const [selectedColor, setSelectedColor] = useState(COLORS[processes.length % COLORS.length]);
   const [pidError, setPidError] = useState('');
   const [arrivalError, setArrivalError] = useState('');
   const [burstError, setBurstError] = useState('');
@@ -183,7 +182,7 @@ export const ProcessControlCenter: React.FC<ProcessControlCenterProps> = ({
     onAddProcess({ pid: trimmedPid, arrivalTime, burstTime, priority, color: selectedColor });
 
     setPid(`P${processes.length + 2}`);
-    setSelectedColor(COLOR_PALETTE[(processes.length + 1) % COLOR_PALETTE.length]);
+    setSelectedColor(COLORS[(processes.length + 1) % COLORS.length]);
     setArrivalTime(0);
     setBurstTime(4);
     setPriority(1);
@@ -263,7 +262,7 @@ export const ProcessControlCenter: React.FC<ProcessControlCenterProps> = ({
       arrivalTime: idx === 0 ? 0 : Math.floor(Math.random() * randArrivalSpread),
       burstTime: Math.floor(Math.random() * (randBurstMax - randBurstMin + 1)) + randBurstMin,
       priority: Math.floor(Math.random() * 5),
-      color: COLOR_PALETTE[idx % COLOR_PALETTE.length],
+      color: COLORS[idx % COLORS.length],
     }));
     onImportProcesses(generated);
   };
@@ -462,7 +461,7 @@ export const ProcessControlCenter: React.FC<ProcessControlCenterProps> = ({
           <div className="field">
             <span className="field-label">Color</span>
             <div className="color-row">
-              {COLOR_PALETTE.map((c) => (
+              {COLORS.map((c) => (
                 <span
                   key={c}
                   className={`swatch ${selectedColor === c ? 'active' : ''}`}

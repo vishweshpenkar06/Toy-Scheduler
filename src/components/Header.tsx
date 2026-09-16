@@ -14,6 +14,8 @@ export const ALGORITHMS: AlgorithmInfo[] = [
   { id: 'multiLevelFeedback', name: 'MLFQ', shortName: 'MLFQ', description: 'Multilevel feedback queue with aging and demotion', isPreemptive: true, requiresQuantum: true },
 ];
 
+export const COLORS = ['#2563eb', '#0ea5e9', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#64748b'];
+
 interface HeaderProps {
   selectedAlgorithm: AlgorithmType;
   onSelectAlgorithm: (alg: AlgorithmType) => void;
