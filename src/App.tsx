@@ -17,8 +17,13 @@ import { RaceMode } from './components/RaceMode';
 import { ExplanationBar } from './components/ExplanationBar';
 import { StateBoard } from './components/StateBoard';
 import { ExperimentLab } from './components/ExperimentLab';
+import { LearningMode } from './components/LearningMode';
+import { InterviewMode } from './components/InterviewMode';
 import { CommandPalette, PaletteAction } from './components/CommandPalette';
 import { generateWorkload } from './utils/workload';
+import { loadSession, saveSession } from './utils/persistence';
+import { downloadReport, buildResultsCsv } from './utils/report';
+import { downloadFile } from './utils/chartUtils';
 import { PresetsModal } from './components/PresetsModal';
 import { OnboardingModal } from './components/OnboardingModal';
 import { KeyboardShortcutsModal } from './components/KeyboardShortcutsModal';
@@ -33,13 +38,14 @@ const EMPTY_RESULT: SimulationResult = {
 
 export default function App() {
   const urlState = useMemo(() => decodeStateFromURL(), []);
+  const saved = useMemo(() => (urlState ? null : loadSession()), [urlState]);
 
-  const [processes, setProcesses] = useState<Process[]>(urlState?.processes ?? PRESET_WORKLOADS[0].processes);
-  const [algorithm, setAlgorithm] = useState<AlgorithmType>(urlState?.algorithm ?? 'fifo');
-  const [quantum, setQuantum] = useState<number>(urlState?.quantum ?? 2);
-  const [coreCount, setCoreCount] = useState<number>(urlState?.coreCount ?? 1);
-  const [contextSwitchCost, setContextSwitchCost] = useState<number>(0);
-  const [viewMode, setViewMode] = useState<'visualizer' | 'comparison' | 'race' | 'experiment'>('visualizer');
+  const [processes, setProcesses] = useState<Process[]>(urlState?.processes ?? saved?.processes ?? PRESET_WORKLOADS[0].processes);
+  const [algorithm, setAlgorithm] = useState<AlgorithmType>(urlState?.algorithm ?? saved?.algorithm ?? 'fifo');
+  const [quantum, setQuantum] = useState<number>(urlState?.quantum ?? saved?.quantum ?? 2);
+  const [coreCount, setCoreCount] = useState<number>(urlState?.coreCount ?? saved?.coreCount ?? 1);
+  const [contextSwitchCost, setContextSwitchCost] = useState<number>(saved?.contextSwitchCost ?? 0);
+  const [viewMode, setViewMode] = useState<'visualizer' | 'comparison' | 'race' | 'experiment' | 'learning' | 'interview'>('visualizer');
   const [soundEnabled, setSoundEnabled] = useState<boolean>(true);
   const [shareCopied, setShareCopied] = useState<boolean>(false);
   const [shareUrlTooLong, setShareUrlTooLong] = useState<boolean>(false);
@@ -77,6 +83,11 @@ export default function App() {
     } catch (err) {
       setSimError(err instanceof Error ? err.message : 'Unknown simulation error');
     }
+  }, [processes, algorithm, quantum, coreCount, contextSwitchCost]);
+
+  useEffect(() => {
+    if (processes.length === 0) return;
+    saveSession({ processes, algorithm, quantum, coreCount, contextSwitchCost });
   }, [processes, algorithm, quantum, coreCount, contextSwitchCost]);
 
   const maxTime = useMemo(() => {
@@ -151,10 +162,18 @@ export default function App() {
         e.preventDefault();
         soundFx.playClick();
         setViewMode((prev) => {
-          const order: Array<'visualizer' | 'comparison' | 'race' | 'experiment'> = ['visualizer', 'comparison', 'race', 'experiment'];
+          const order: Array<typeof viewMode> = ['visualizer', 'comparison', 'race', 'experiment', 'learning', 'interview'];
           const idx = order.indexOf(prev);
           return order[(idx + 1) % order.length];
         });
+      } else if (e.key.toLowerCase() === 'l') {
+        e.preventDefault();
+        soundFx.playClick();
+        setViewMode('learning');
+      } else if (e.key.toLowerCase() === 'i') {
+        e.preventDefault();
+        soundFx.playClick();
+        setViewMode('interview');
       } else if (['1', '2', '3', '4', '5', '6', '7', '8', '9'].includes(e.key)) {
         const index = parseInt(e.key, 10) - 1;
         if (ALGORITHMS[index]) {
@@ -228,8 +247,11 @@ export default function App() {
         setProcesses(PRESET_WORKLOADS[0].processes);
         setAlgorithm('fifo');
       }
+      if (action.id === 'report') {
+        downloadReport({ processes, algorithm, quantum, coreCount, contextSwitchCost, result: simulationResult });
+      }
     }
-  }, [handleShare]);
+  }, [handleShare, processes, algorithm, quantum, coreCount, contextSwitchCost, simulationResult]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -375,6 +397,29 @@ export default function App() {
               <ExplanationBar timeline={simulationResult.timeline} processes={processes} algorithm={algorithm} currentTimeStep={currentTimeStep} />
               <ProcessResultsTable results={simulationResult.processResults} processes={processes} />
               <StateBoard timeline={simulationResult.timeline} processes={processes} currentTimeStep={currentTimeStep} />
+              <div className="card card-body" style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                <button
+                  className="btn btn-quiet"
+                  onClick={() => downloadFile(buildResultsCsv(simulationResult), 'quantum-scheduler-results.csv', 'text/csv')}
+                >
+                  Export results CSV
+                </button>
+                <button
+                  className="btn btn-quiet"
+                  onClick={() =>
+                    downloadReport({
+                      processes,
+                      algorithm,
+                      quantum,
+                      coreCount,
+                      contextSwitchCost,
+                      result: simulationResult,
+                    })
+                  }
+                >
+                  Export Markdown report
+                </button>
+              </div>
             </div>
           ) : viewMode === 'comparison' ? (
             <AlgorithmLeaderboard
@@ -393,6 +438,10 @@ export default function App() {
               contextSwitchCost={contextSwitchCost}
               coreCount={coreCount}
             />
+          ) : viewMode === 'learning' ? (
+            <LearningMode algorithm={algorithm} processes={processes} result={simulationResult} />
+          ) : viewMode === 'interview' ? (
+            <InterviewMode />
           ) : (
             <RaceMode
               processes={processes}

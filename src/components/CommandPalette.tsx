@@ -5,9 +5,9 @@ import { PRESET_WORKLOADS } from '../data/presets';
 
 export type PaletteAction =
   | { kind: 'algorithm'; id: AlgorithmType; label: string }
-  | { kind: 'view'; id: 'visualizer' | 'comparison' | 'race' | 'experiment'; label: string }
+  | { kind: 'view'; id: 'visualizer' | 'comparison' | 'race' | 'experiment' | 'learning' | 'interview'; label: string }
   | { kind: 'preset'; id: string; label: string }
-  | { kind: 'cmd'; id: 'share' | 'shortcuts' | 'clear' | 'reset'; label: string };
+  | { kind: 'cmd'; id: 'share' | 'shortcuts' | 'clear' | 'reset' | 'report'; label: string };
 
 interface CommandPaletteProps {
   open: boolean;
@@ -29,12 +29,15 @@ export const CommandPalette = ({ open, onClose, onRun }: CommandPaletteProps) =>
       { kind: 'view', id: 'comparison', label: 'View: Benchmark' },
       { kind: 'view', id: 'race', label: 'View: Race' },
       { kind: 'view', id: 'experiment', label: 'View: Experiment lab' },
+      { kind: 'view', id: 'learning', label: 'View: Learning mode' },
+      { kind: 'view', id: 'interview', label: 'View: Interview mode' },
     ];
     const presets: PaletteAction[] = PRESET_WORKLOADS.map((p) => ({
       kind: 'preset', id: p.id, label: `Preset: ${p.name}`,
     }));
     const cmds: PaletteAction[] = [
       { kind: 'cmd', id: 'share', label: 'Command: Copy share URL' },
+      { kind: 'cmd', id: 'report', label: 'Command: Download Markdown report' },
       { kind: 'cmd', id: 'shortcuts', label: 'Command: Keyboard shortcuts' },
       { kind: 'cmd', id: 'reset', label: 'Command: Reset default workload' },
       { kind: 'cmd', id: 'clear', label: 'Command: Clear all processes' },

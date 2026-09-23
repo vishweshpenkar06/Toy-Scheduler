@@ -1,11 +1,12 @@
 # Quantum Scheduler
 
-Interactive CPU scheduling algorithm visualizer and performance lab. Build
-workloads, step through execution on an animated Gantt timeline, and compare
-9 scheduling algorithms side by side — including multi-core simulation up to
-4 cores.
+Interactive CPU scheduling laboratory. Build workloads (including multi-burst
+CPU/I/O processes, deadlines, and tickets), step through execution on an
+animated multi-core Gantt timeline, and compare **17 scheduling algorithms**
+side by side.
 
-**Stack:** Vite · React 19 · TypeScript (strict) · Vitest · plain CSS
+**Stack:** Vite · React 19 · TypeScript (strict) · Vitest · plain CSS  
+**Runtime deps:** only `react` and `react-dom`.
 
 ---
 
@@ -15,10 +16,12 @@ workloads, step through execution on an animated Gantt timeline, and compare
 - [Algorithms](#algorithms)
 - [Metrics](#metrics)
 - [Multi-core simulation](#multi-core-simulation)
-- [Features](#features)
+- [Context switches & I/O](#context-switches--io)
+- [Features & views](#features--views)
 - [Keyboard shortcuts](#keyboard-shortcuts)
 - [Preset workloads](#preset-workloads)
-- [Import / export / share](#import--export--share)
+- [Import / export / share / report](#import--export--share--report)
+- [Persistence](#persistence)
 - [Project structure](#project-structure)
 - [Architecture notes](#architecture-notes)
 - [Validation rules](#validation-rules)
@@ -34,194 +37,207 @@ workloads, step through execution on an animated Gantt timeline, and compare
 ```bash
 npm install
 npm run dev       # dev server on http://localhost:5173
-npm test          # run the full test suite
+npm test          # vitest (watch)
+npx vitest run    # single headless run
 npm run build     # typecheck + production build to dist/
 npm run lint      # eslint
 npm run test:ui   # vitest UI
 ```
 
-Runtime dependencies are only `react` and `react-dom`. Everything else
-(Vite, TypeScript, Vitest, ESLint) is dev tooling.
-
 ---
 
 ## Algorithms
 
-All 9 algorithms live in `src/engine/scheduler.ts` behind the
-`runAlgorithm(algorithm, processes, options)` dispatcher. Keyboard keys
-`1`–`9` map to the table order below.
+All 17 algorithms run through `runAlgorithm(algorithm, processes, options)`
+in `src/engine/runAlgorithm.ts`, which dispatches to the event-driven
+`SimulationKernel` (policy/mechanism split) with parity coverage against the
+legacy `src/engine/scheduler.ts` for the core five algorithms.
 
-| # | Key | Name | ID | Preemptive | Behavior |
-|---|-----|------|----|-----------:|----------|
-| 1 | `1` | FCFS | `fifo` | No | First-Come First-Served. Sorts by arrival (PID tie-break), runs each process to completion in one slice, jumps time forward when idle. |
-| 2 | `2` | SJF | `sjf` | No | Shortest Job First. Among arrived processes, picks the shortest `burstTime` (PID tie-break), runs to completion. |
-| 3 | `3` | SRTF | `srtf` | Yes | Shortest Remaining Time First. Preempts only when an arriving process has **strictly** shorter remaining time (or equal remaining + lexicographically smaller PID). Event-driven slicing avoids unnecessary fragmentation. |
-| 4 | `4` | Round Robin | `roundRobin` | Yes | FIFO ready queue, slice = `min(quantum, remaining)`. A **lone** process runs continuously until the next arrival or completion (anti-fragmentation). Unfinished processes re-enqueue after new arrivals are admitted. |
-| 5 | `5` | Priority (NP) | `priorityNonPreemptive` | No | Runs the highest-priority arrived process to completion. **Lower number = higher priority**; missing priority = lowest (`Number.MAX_SAFE_INTEGER`); PID tie-break. |
-| 6 | `6` | Priority (P) | `priorityPreemptive` | Yes | Same selection, but stops the current process when an arrival has strictly higher priority (lower number) or equal priority + smaller PID. |
-| 7 | `7` | Priority + Aging | `priorityAging` | Yes | Maintains an `effectivePriority` per process. Every `agingInterval` (default **3**) time units, a waiting arrived process's priority is reduced by `agingAmount` (default **1**, floored at 0 — i.e. promoted). The current slice also stops at the next pending aging tick so promotions are reconsidered. |
-| 8 | `8` | Multilevel Queue | `multiLevelQueue` | No | Processes are assigned **once** to a queue by priority band, then always served FIFO from the first non-empty queue (strict queue-level priority, runs to completion). Default bands: **System** pri 0–1, **Interactive** pri 2–3, **Batch** pri 4+. |
-| 9 | `9` | MLFQ | `multiLevelFeedback` | Yes | New processes enter **level 0**. Each level runs with its own quantum (default **[2, 4, 8]**). After `demotionThreshold` (**2**) exhausted slices a process is demoted one level; any process waiting ≥ `agingPromotionInterval` (**10**) since last service is promoted one level before dispatch. |
+**Keys:** `1`–`9` select algorithms 1–9; `Shift+1`…`Shift+8` (`!@#$%^&*`)
+select algorithms 10–17.
+
+| # | Key | Name | ID | Preemptive | Notes |
+|---|-----|------|----|-----------:|-------|
+| 1 | `1` | FCFS | `fifo` | No | Arrival order, PID tie-break. |
+| 2 | `2` | SJF | `sjf` | No | Shortest `burstTime` among arrived. |
+| 3 | `3` | SRTF | `srtf` | Yes | Preempts on strictly shorter remaining time. |
+| 4 | `4` | Round Robin | `roundRobin` | Yes | Quantum slice; lone process runs without pointless fragmentation. |
+| 5 | `5` | Priority (NP) | `priorityNonPreemptive` | No | Lower number = higher priority. |
+| 6 | `6` | Priority (P) | `priorityPreemptive` | Yes | Preempts on higher priority arrival. |
+| 7 | `7` | Priority + Aging | `priorityAging` | Yes | Effective priority promoted while waiting. |
+| 8 | `8` | Multilevel Queue | `multiLevelQueue` | No | Fixed priority bands, FIFO per queue. |
+| 9 | `9` | MLFQ | `multiLevelFeedback` | Yes | Demotion on exhausted quanta; promotion on wait. |
+| 10 | `Shift+1` | HRRN | `hrrn` | No | Highest response ratio next. |
+| 11 | `Shift+2` | LRTF | `lrtf` | Yes | Longest remaining time first. |
+| 12 | `Shift+3` | Lottery | `lottery` | Yes | Probabilistic share by `tickets`. |
+| 13 | `Shift+4` | Stride | `stride` | Yes | Deterministic proportional share (pass values). |
+| 14 | `Shift+5` | WFQ | `wfq` | Yes | Weighted fair queuing by virtual finish time. |
+| 15 | `Shift+6` | EDF | `edf` | Yes | Earliest absolute `deadline` first. |
+| 16 | `Shift+7` | RMS | `rms` | Yes | Static priority by period (rate monotonic). |
+| 17 | `Shift+8` | Adaptive RR | `adaptive` | Yes | RR with adaptive quantum / anti-starvation. |
 
 **Shared engine rules**
 
-- Every algorithm validates input first (`validateProcesses`) and throws on
-  duplicate PIDs or invalid values.
-- Empty workload → zeroed result (no timeline, all averages 0).
-- Deterministic everywhere: PID lexicographic tie-break after the primary key.
-- The engine does not emit idle slices; idle jumps advance the clock to the
-  next arrival. Idle gaps are synthesized for display by the multi-core pass
-  and Gantt chart.
-- Round Robin quantum must be a positive integer, else it throws
-  `Invalid quantum: must be a positive integer, got X`. The app default is
-  `quantum = 2` (engine fallback when none is passed is `1`).
+- Input validated first (`validateProcesses`); throws on duplicate PIDs or
+  invalid values.
+- Empty workload → zeroed result.
+- Deterministic: PID lexicographic tie-break after the primary key.
+- Same-timestamp events are batched (priority order: arrival → … →
+  terminate), then a single dispatch pass runs.
+- RR quantum must be a positive integer; app default is `2`.
+- No universal “best algorithm” labeling — comparisons are empirical.
+
+**Event kernel (high level)**
+
+```
+EventQueue → PROCESS_ARRIVAL / QUANTUM_EXPIRY / BLOCK / UNBLOCK /
+             PREEMPT / CONTEXT_SWITCH_DONE / PROCESS_TERMINATE
+                    ↓
+            tryDispatchAll()  (per free core)
+                    ↓
+            policies.ts  selectNext(core, state)
+```
 
 ---
 
 ## Metrics
 
-Per-process metrics are computed in `calculateMetrics` from the timeline
-(idle slices ignored):
-
-| Metric | Formula |
+| Metric | Meaning |
 |--------|---------|
-| Completion time | `max(end)` over all slices with that PID |
-| Response time | `max(0, firstSliceStart − arrivalTime)` |
-| Turnaround time | `completionTime − arrivalTime` |
-| Waiting time | `turnaroundTime − burstTime` |
-| Averages | arithmetic mean of each metric across all processes |
+| Completion | Max end time of that PID’s slices |
+| Response | First slice start − arrival (≥ 0) |
+| Turnaround | Completion − arrival |
+| Waiting | Turnaround − total CPU burst |
+| Throughput | Completions / makespan |
+| CPU util | Busy time / (span × cores) × 100 |
+| Context switches | Count of CS transitions (from `metrics.contextSwitchCount`) |
+| Jain fairness | 1.0 = equal share across processes |
+| Wait p50 / p95 | Percentiles of per-process waiting time |
+| Deadline misses | Processes finishing after `deadline` (EDF/RMS workloads) |
 
-The four stat cards show **Avg waiting**, **Turnaround**,
-**Response**, and **CPU utilization** (`busy / (totalSpan × coreCount) × 100`).
-The per-process table shows arrival, burst, completion, turnaround, waiting,
-and response for every PID.
+Stat cards show waiting / turnaround / response / utilization, plus an
+extended row (throughput, fairness, CS, wait p95).
 
 ---
 
 ## Multi-core simulation
 
-`runMultiCore(singleCoreResult, coreCount)` remaps the single-core timeline
-onto **1–4 cores** (values outside that range are clamped):
-
-1. The single-core slice **order** is preserved — it represents a global
-   ready-queue ordering of scheduling decisions.
-2. Each non-idle slice is dispatched greedily to the core that **becomes
-   free earliest** (first minimum wins, core 0 on ties). Start time is
-   `max(originalStart, coreFreeAt[bestCore])`; duration is preserved; a
-   `core` field is assigned.
-3. Idle slices are pinned to **core 0** (idle gaps are global).
-4. `coreCount <= 1` or an empty timeline returns the input unchanged —
-   single-core results are byte-identical to the original single-core run.
-
-**Important:** process metrics (waiting/turnaround/response and the
-averages) are **passed through unchanged from the single-core run** — the
-multi-core pass only remaps the timeline; it does not recompute metrics for
-the parallel schedule. CPU utilization, however, is core-adjusted.
+True multi-core: the kernel dispatches onto **1–4 cores**. A core in
+context-switch or waiting for I/O is not available for dispatch. Timeline
+slices carry a `core` field; Gantt renders one track per core. Metrics are
+recomputed from the parallel schedule (not copied from single-core).
 
 ---
 
-## Features
+## Context switches & I/O
 
-- **Animated Gantt timeline** — per-core tracks, synthesized idle gaps,
-  nice axis ticks (1/2/2.5/5/10 mantissa steps), hover + pin tooltips,
-  playback playline, active-slice highlight, legend, focusable/aria-labeled
-  blocks.
-- **Playback** — play/pause, step ±1 ms, reset, current/max readout, speed
-  0.25×–4×. Animation interval is `max(80, 450 / speed)` ms per tick.
-  Playback auto-resets when processes/algorithm/quantum change, auto-stops
-  at the end, and restarting at the end restarts from 0.
-- **Three view modes** — `visualizer` (default), `comparison` (leaderboard
-  of all 9 ranked by average waiting time, best flagged within 0.001), and
-  `race` (all 9 as mini-Gantt tracks on a shared axis and playhead, sorted
-  by total makespan, with "Fastest" badges and per-row stats: total, avg
-  wait, CPU util, slice count ≈ context switches). Cycle with `C`.
-- **Decision log / "Why?" bar** — `generateDecisionLog()` produces a
-  human-readable message per slice with algorithm-specific phrasing (FCFS
-  queue order, SJF "shortest job", SRTF preemption, RR quantum expiry,
-  priority preemption, aging promotions, MLQ/MLFQ queue selection,
-  "CPU idle"). The ExplanationBar shows the message for the current time
-  step (falling back to the latest).
-- **Workload builder** — add/remove processes with field-level validation,
-  simple random generator (4–6 processes), custom random generator sliders
-  (2–12 processes, burst 1–10/2–20, arrival spread 1–20), reset to default,
-  clear all.
-- **5 preset workloads** (see below) via the presets modal.
-- **Import / export / share** (see below).
-- **Sound effects** — Web Audio oscillator sweeps (`SoundSynthesizer`
-  singleton `soundFx`): click (sine 800→400 Hz), step (triangle 1200→600),
-  play (sine 440→880), pause (sine 660→330). Toggled from the header
-  speaker button; default on.
-- **Onboarding** — first-run 3-step tour persisted to
-  `localStorage['toy-scheduler-onboarded']`.
-- **Native `<dialog>` modals** — presets, shortcuts, and onboarding use the
-  platform dialog element for built-in focus trapping, Escape handling, and
-  backdrop.
-- **Simulation error banner** — engine exceptions surface as a dismissible
-  banner instead of failing silently.
-- **Responsive** — tablet ≤960px, mobile ≤640px; honors
-  `prefers-reduced-motion`.
+- **Context-switch cost** — header input (`CS cost`, ms). When > 0 and work
+  remains, the kernel inserts a `CONTEXT_SWITCH` slice (pid `"idle"`,
+  `kind: "CONTEXT_SWITCH"`) between switches. Gantt shows these blocks.
+- **Multi-burst I/O** — optional `process.bursts: { type: 'cpu' | 'io';
+  duration }[]`. Validation requires the sequence to end on a CPU burst.
+  Blocked processes appear in the READY/BLOCKED board; I/O intervals render
+  as `IO` slices on the Gantt. The **io-bursts** preset demonstrates this.
+
+---
+
+## Features & views
+
+Cycle views with the header button or **`C`**:
+
+| View | What it shows |
+|------|----------------|
+| **Visualizer** | Single algorithm: HUDs, Gantt, playback, decision log, results table, state board, Markdown report export |
+| **Benchmark** | All 17 ranked by average waiting time (best flagged) |
+| **Race** | All 17 as mini-Gantts on a shared playhead, sorted by makespan |
+| **Experiment** | Quantum sweep bar chart + table + CSV export |
+| **Learning** | Concept cards for the selected algorithm + live scenario insights |
+| **Interview** | 8-question quiz with explanations and scoring |
+
+Also:
+
+- **Playback** — play/pause, step ±1 ms, reset, speed 0.25×–4×, event jump
+  buttons and scrubber.
+- **State board** — READY / RUNNING / BLOCKED / FINISHED chips at current *t*.
+- **Decision log** — algorithm-specific “why this slice?” messages
+  (`src/utils/explain.ts`, `decisionLog.ts`).
+- **Command palette** — `Ctrl/Cmd+K`: algorithms, views, presets, share,
+  report, shortcuts, reset/clear.
+- **Workload builder** — add/remove with validation; random generator with
+  profiles (`classic` / `io` / `deadline` / `weighted`) via
+  `generateWorkload`.
+- **9 preset workloads** (below).
+- **Sound effects** — Web Audio `soundFx`; header speaker toggle.
+- **Onboarding** — first-run tour in `localStorage`.
+- **Native `<dialog>`** modals (presets, shortcuts, onboarding).
+- **Simulation error banner** for engine exceptions.
+- Responsive + `prefers-reduced-motion`.
 
 ---
 
 ## Keyboard shortcuts
 
-Ignored when the event target is an `INPUT`/`TEXTAREA`/`SELECT`/`BUTTON`, or
-when **Ctrl/Meta/Alt is held** (so browser shortcuts are never hijacked).
+Ignored when focus is in `INPUT`/`TEXTAREA`/`SELECT`/`BUTTON`, or when
+Ctrl/Meta/Alt is held (except the palette combo).
 
 | Key | Action |
 |-----|--------|
-| **Space** | Toggle play/pause (restarts from 0 if at end) |
-| **←** | Pause and step back 1 ms (min 0) |
-| **→** | Pause and step forward 1 ms (max = end) |
-| **R** | Pause and reset playback to t = 0 |
-| **C** | Cycle view: visualizer → comparison → race → visualizer |
-| **1–9** | Select algorithm (1 = FCFS … 9 = MLFQ) and return to visualizer |
+| **Space** | Play / pause |
+| **← / →** | Step −1 / +1 ms |
+| **R** | Reset playback to t = 0 |
+| **C** | Cycle view (all six) |
+| **L** | Learning mode |
+| **I** | Interview mode |
+| **1–9** | Algorithms 1–9 → visualizer |
+| **Shift+1–8** | Algorithms 10–17 → visualizer |
+| **Ctrl/Cmd + K** | Command palette |
+| **?** | Keyboard shortcuts modal |
 
 ---
 
 ## Preset workloads
 
-Five educational scenarios in `src/data/presets.ts`. Selecting one also
-applies its default algorithm (and quantum, where set).
+`src/data/presets.ts` — selecting a preset also applies its default
+algorithm/quantum where set.
 
-| ID | Name | Description | Default alg | Quantum |
-|----|------|-------------|-------------|---------|
-| `standard` | Standard Staggered Workload | Staggered arrivals, mixed bursts — classic textbook case. | `fifo` | — |
-| `convoy` | Convoy Effect Demonstration | A 24 ms CPU-bound process arrives first; short processes wait excessively under FCFS. | `fifo` | — |
-| `preemption` | SRTF & Priority Preemption Showcase | Shorter/higher-priority tasks arrive mid-execution and preempt. | `srtf` | — |
-| `round-robin` | Round Robin Quantum Slicing | All arrive at t=0 to highlight time slicing and context switches. | `roundRobin` | 2 |
-| `priority-test` | Priority Scheduling Matrix | Multiple priority levels to compare preemptive vs non-preemptive priority. | `priorityPreemptive` | — |
+| ID | Name | Focus |
+|----|------|--------|
+| `standard` | Standard Staggered Workload | Classic mixed arrivals |
+| `convoy` | Convoy Effect Demonstration | FCFS convoy with one long job |
+| `preemption` | SRTF & Priority Preemption Showcase | Mid-run preemption |
+| `round-robin` | Round Robin Quantum Slicing | All arrive at t=0 |
+| `priority-test` | Priority Scheduling Matrix | Priority bands |
+| `io-bursts` | CPU / I/O Burst Workload | BLOCKED + multi-burst timelines |
+| `deadline-edf` | Deadline Workload (EDF / RMS) | Deadline misses |
+| `lottery-weights` | Weighted Fairness (Lottery / Stride / WFQ) | Tickets & weights |
+| `hrrn-mix` | Mixed Burst HRRN Showcase | Response-ratio fairness |
 
-App default state (no URL state): `standard` preset, `fifo`, quantum 2,
-1 core.
+Default app state (no URL/session): `standard`, `fifo`, quantum 2, 1 core.
 
 ---
 
-## Import / export / share
+## Import / export / share / report
 
-**Export** — `workload.json` (pretty-printed process array) or
-`workload.csv` (header `pid,arrivalTime,burstTime,priority`).
+- **Export workload** — `workload.json` or
+  `workload.csv` (`pid,arrivalTime,burstTime,priority`).
+- **Import** — `.json` or `.csv` with per-row validation; Confirm disabled
+  while errors exist.
+- **Share URL** — base64 `?s=` state `{v, p, alg, q, cores}`; schema
+  version, 20-process cap, algorithm whitelist from `ALGORITHMS`, re-validate
+  on decode; encode refuses URLs > 2000 chars (“Too long”).
+- **Markdown report** — “Export Markdown report” in visualizer (or palette
+  **Command: Download Markdown report**): config, summary metrics,
+  per-process table, workload table. CSV helper `buildResultsCsv` for
+  results-only export.
 
-**Import** — `.json` (array or `{processes:[…]}`) or `.csv` (optional
-header row detected via "pid"/"process"; columns `pid,arrival,burst[,priority]`;
-PID uppercased, colors auto-assigned). Per-row validation errors and
-duplicate-PID warnings appear in a confirmation dialog; **Confirm is
-disabled while validation errors exist**.
+---
 
-**Shareable permalinks** — `encodeStateToURL` compresses the full state
-`{v, p:[{pid,arr,burst,pri,color}], alg, q, cores}` into a base64 `?s=` URL
-param. Guards:
+## Persistence
 
-- `SCHEMA_VERSION = 1` — decode rejects other versions.
-- `MAX_PROCESSES = 20` — decode slices input to 20 processes.
-- Algorithm must be one of the 9 valid IDs (derived from `ALGORITHMS`, the
-  single source of truth); otherwise falls back to `fifo`.
-- Quantum falls back to `2`, core count to `1` (must be an integer 1–4).
-- Every decoded process is re-validated (`validateProcessInput`); any
-  failure rejects the whole decode.
-- Encode returns `null` if the final URL exceeds **2000 chars** (browser
-  practical limit); the Share button then shows "Too long" for 3 s,
-  otherwise copies to clipboard and shows "Copied!" for 2 s.
+Session state (`processes`, algorithm, quantum, cores, CS cost) is saved to
+`localStorage['toy-scheduler-session-v1']` on every change and restored on
+load (unless a share URL is present). Helpers: `loadSession` / `saveSession`
+/ `clearSession` in `src/utils/persistence.ts`.
 
 ---
 
@@ -229,113 +245,87 @@ param. Guards:
 
 ```
 Toy Scheduler/
-├── index.html                 # Vite entry; Google Fonts (Inter + JetBrains Mono)
-├── package.json               # scripts + deps (only react, react-dom at runtime)
-├── vite.config.ts             # react plugin, dev port 5173
-├── vitest.config.ts           # globals: true, environment: "node"
-├── tsconfig.json              # ES2020, strict, jsx: react-jsx, noEmit
-├── eslint.config.mjs          # flat config: js + typescript-eslint + react-hooks
-├── README.md, FOLLOWUP.md     # docs
-├── public/                    # icons and favicons
+├── index.html, package.json, vite.config.ts, vitest.config.ts,
+│   tsconfig.json, eslint.config.mjs
+├── README.md, FOLLOWUP.md
+├── docs/architecture-audit.md, docs/baseline.md
+├── public/
 └── src/
-    ├── main.tsx               # ReactDOM root + StrictMode
-    ├── App.tsx                # root state: processes, algorithm, quantum,
-    │                          #   coreCount, viewMode, playback, sound, modals,
-    │                          #   keyboard shortcuts, simError, share state
-    ├── types.ts               # Process, TimelineSlice, ProcessResult,
-    │                          #   SimulationResult, AlgorithmType (9 ids),
-    │                          #   option interfaces, AlgorithmInfo, PresetWorkload
-    ├── index.css              # full design system (single stylesheet)
-    ├── engine/
-    │   ├── scheduler.ts       # 9 algorithms + validation + metrics +
-    │   │                      #   runAlgorithm + runMultiCore
-    │   └── __tests__/scheduler.test.ts      # 68 engine tests
-    ├── components/
-    │   ├── Header.tsx         # top bar; exports ALGORITHMS metadata + COLORS
-    │   ├── ProcessControlCenter.tsx  # sidebar: workload list, import/export, add form
-    │   ├── ReadyQueueHud.tsx  # ready + completed chips at current t
-    │   ├── CpuMonitorHud.tsx  # running-process ring + progress bar
-    │   ├── PlaybackControls.tsx      # transport bar + speed select
-    │   ├── GanttChart.tsx     # per-core Gantt timeline
-    │   ├── ExplanationBar.tsx # "Why?" decision message
-    │   ├── ProcessResultsTable.tsx   # per-process metrics table
-    │   ├── AlgorithmLeaderboard.tsx  # compare mode (all 9 ranked)
-    │   ├── RaceMode.tsx       # race mode (all 9 mini-Gantts)
-    │   ├── PresetsModal.tsx   # native <dialog> preset picker
-    │   ├── KeyboardShortcutsModal.tsx
-    │   └── OnboardingModal.tsx
-    ├── data/
-    │   └── presets.ts         # 5 preset workloads
-    └── utils/
-        ├── audio.ts           # SoundSynthesizer singleton (soundFx)
-        ├── chartUtils.ts      # niceStep(), buildColorMap(), downloadFile()
-        ├── decisionLog.ts     # generateDecisionLog() → per-slice "why?" messages
-        ├── shareUrl.ts        # permalink encode/decode/clear
-        └── __tests__/shareUrl.test.ts    # 18 permalink tests
+    ├── main.tsx, App.tsx, types.ts, index.css
+    ├── domain/          # models, validation, bridge (ProcessSpec, bursts)
+    ├── engine/          # legacy scheduler.ts, runAlgorithm.ts, metrics.ts
+    ├── simulation/      # SimulationKernel, EventQueue, policies, policy,
+    │                    #   dataStructures (MinHeap/PQ/Deque)
+    ├── data/presets.ts  # 9 presets
+    ├── components/      # Header, HUDs, Gantt, Playback, Leaderboard, Race,
+    │                    #   ExperimentLab, LearningMode, InterviewMode,
+    │                    #   CommandPalette, StateBoard, modals, …
+    ├── components/learningContent.ts   # lessons, quiz, scenario insights
+    └── utils/           # audio, chartUtils, decisionLog, explain,
+                         #   shareUrl, workload, experiment, report,
+                         #   persistence
 ```
 
 ---
 
 ## Architecture notes
 
-**Data flow:** `App.tsx` owns state → memoized
-`runAlgorithm(algorithm, processes, {quantum})` → `runMultiCore(result,
-coreCount)` → consumed by HUDs, Gantt, table, and ExplanationBar. The
-leaderboard and race modes each re-run all 9 algorithms themselves (memoized
-on `[processes, quantum]`). Engine exceptions are caught into an empty
-result for rendering, while a separate effect sets a `simError` banner.
+**Data flow:** `App.tsx` owns state → memoized `runAlgorithm(...)` →
+`SimulationKernel` → HUDs, Gantt, table, ExplanationBar. Benchmark/Race each
+re-run all algorithms (memoized on `[processes, quantum, cores, CS]`).
 
 **Single source of truth:** `ALGORITHMS` in `Header.tsx` drives the header
-selector, keyboard keys 1–9, the share-URL algorithm whitelist
-(`VALID_ALGORITHMS` is derived from it), and the leaderboard/race ordering.
-`COLORS` (8 colors) is exported from `Header.tsx` and shared by the random
-generator, process form, and presets.
+selector, keyboard mapping, share-URL whitelist, leaderboard/race order, and
+palette. `COLORS` is shared by generator/form/presets.
 
-**Anti-fragmentation:** Round Robin and SRTF avoid pointlessly slicing a
-process that is alone in the queue — it runs continuously up to the next
-arrival or completion. Regression-tested (see Validation tests below).
+**Policy/mechanism:** kernel handles events, time, cores, CS, I/O;
+`policies.ts` only implements `selectNext`. Legacy `scheduler.ts` remains
+for parity tests on the core five algorithms.
 
-**Refactoring history:** `FOLLOWUP.md` logs the verification pass and the
-Ponytail-guided refactor (native `<dialog>` modals, parameterized audio
-helper, shared `chartUtils`, dead CSS removal, etc.).
+**Offline-first / no LLM in core:** simulation is pure and deterministic;
+no network calls at runtime.
 
 ---
 
 ## Validation rules
 
-`validateProcessInput(p)` (exported from the engine) is the shared
-validator used by the engine, the import flow, and the share-URL decoder:
+1. PID required, non-empty after trim.
+2. `arrivalTime` finite integer ≥ 0.
+3. `burstTime` finite integer > 0.
+4. Domain layer (`validateProcessSpec`): non-empty burst list, positive
+   durations, valid burst types, sequence must end on CPU, deadline ≥
+   arrival, positive period/tickets when present.
+5. Duplicate PIDs rejected before per-process checks.
+6. RR quantum must be a positive integer.
 
-1. PID required and non-empty after trim.
-2. `arrivalTime` must be a finite **integer** and `>= 0`.
-3. `burstTime` must be a finite **integer** and `> 0`.
-
-`validateProcesses` (internal) additionally throws on **duplicate PIDs**
-(`Duplicate process ID found: <pid>`) before delegating per-process checks.
-Round Robin additionally requires a positive integer quantum.
-
-Errors surface in the UI as field-level form errors (add-process form),
-per-row import errors (confirmation dialog), or the dismissible simulation
-error banner.
+Errors surface as field-level form errors, import dialog rows, or the
+simulation error banner.
 
 ---
 
 ## Testing
 
-**Runner:** Vitest with `globals: true` and `environment: "node"` (no jsdom
-— `shareUrl` tests mock `window`/`location`/`history` on `globalThis`).
-`tsconfig` includes `"types": ["vitest/globals"]`.
+**Runner:** Vitest, `globals: true`, `environment: "node"` (shareUrl tests
+mock `window`/`location`/`history` on `globalThis`).
 
-**86 tests** across two co-located suites:
+**195 tests** across 11 suites:
 
-| Suite | Tests | Coverage themes |
-|-------|------:|-----------------|
-| `src/engine/__tests__/scheduler.test.ts` | 68 | Exact timeline equality, metric formulas, determinism, PID tie-breaks, starvation/aging, RR anti-fragmentation regressions, duplicate-PID ×5 and invalid-value ×4 validation, quantum validation, Priority+Aging, MLQ, MLFQ, multi-core core-assignment and no-overlap. |
-| `src/utils/__tests__/shareUrl.test.ts` | 18 | Encode (s param, schema version, round-trip, 2000-char limit), decode (missing/malformed/non-JSON/wrong shape, schema version, fallbacks for alg/quantum/cores, 20-process cap, negative-arrival/zero-burst rejection, NaN handling, full valid payload). |
+| Suite | Tests | Themes |
+|-------|------:|--------|
+| `engine/__tests__/scheduler.test.ts` | 68 | Exact timelines, metrics, determinism, validation, RR anti-fragmentation |
+| `domain/__tests__/domain.test.ts` | 19 | Spec validation, bursts, deadlines, tickets, bridge |
+| `engine/__tests__/phases.test.ts` | 25 | Phase regressions (CS, I/O, new algorithms) |
+| `engine/__tests__/parity.test.ts` | 14 | Kernel vs legacy core algorithms |
+| `engine/__tests__/multicore.test.ts` | 14 | No overlap, metrics, utilization ≤ 100% |
+| `simulation/__tests__/kernel.test.ts` | 13 | Parity, event order, invariants |
+| `simulation/__tests__/eventQueue.test.ts` | 5 | Priority + sequence ordering |
+| `simulation/__tests__/dataStructures.test.ts` | 5 | MinHeap etc. |
+| `utils/__tests__/shareUrl.test.ts` | 18 | Encode/decode guards |
+| `utils/__tests__/workload.test.ts` | 7 | Generator profiles + experiment sweeps (17 algos) |
+| `components/__tests__/learning.test.ts` | 7 | Lessons, quiz, report, persistence |
 
 ```bash
-npx vitest run        # headless
-npm run test:ui       # vitest UI
+npx vitest run
 ```
 
 ---
@@ -350,50 +340,38 @@ npm run test:ui       # vitest UI
 | `npm run test:ui` | `vitest --ui` |
 | `npm run lint` | `eslint .` |
 
-- **TypeScript** — ES2020 target, `strict: true`, `moduleResolution:
-  bundler`, `jsx: react-jsx`, `noEmit`, `isolatedModules`, `skipLibCheck`.
-- **ESLint** — flat config; JS recommended + `typescript-eslint` recommended
-  + `react-hooks` recommended for `**/*.{ts,tsx}`; ignores `dist`.
-- **Vite** — `@vitejs/plugin-react`, dev port 5173.
-- **Bundle** — ~257.5 KB JS (77.8 KB gzip), ~21.9 KB CSS (4.6 KB gzip).
+- TypeScript: ES2020, strict, `jsx: react-jsx`, `noEmit`.
+- ESLint flat config: JS + typescript-eslint + react-hooks; ignores `dist`.
+- Vite: `@vitejs/plugin-react`, port 5173.
+
+**Full gate (run before commit):**
+
+```bash
+npx vitest run; npx tsc --noEmit; npx eslint .; npm run build
+```
 
 ---
 
 ## Design system
 
-`src/index.css` is a single precision **light theme** stylesheet organized
-into comment-delimited sections (design tokens → app shell → workspace →
-forms → metrics → transport → Gantt → tables → leaderboard → modals →
-responsive → reduced-motion).
+`src/index.css` — single light-theme stylesheet: tokens → shell → workspace
+→ forms → metrics → transport → Gantt (incl. CS/IO blocks) → state board →
+tables → leaderboard → palette → modals → responsive → reduced-motion.
 
-Tokens live on `:root`:
-
-- **Fonts** — `--font-sans` (Inter + system), `--font-mono` (JetBrains Mono).
-- **Surfaces** — `--bg #f5f6f8`, `--surface #fff`, `--surface-2/3`,
-  `--overlay`.
-- **Borders** — `--border`, `--border-strong`, `--border-focus`.
-- **Text** — `--text-1/2/3` three-step hierarchy.
-- **Accent/status** — `--accent #2154f0`, `--green #0f9168`,
-  `--red #d3382f`, `--amber #a05e03` (+`-soft` variants).
-- **Radii/shadows/easing** — `--radius-sm/md/lg/full`, `--shadow-sm/md/lg`,
-  `--ease: cubic-bezier(0.2,0,0,1)`.
-
-Responsive breakpoints: tablet ≤960px, mobile ≤640px. Includes custom
-scrollbars, `fade-in`/`rise-in` keyframes, a focus-visible ring, and
-`@media (prefers-reduced-motion: reduce)`.
+Tokens on `:root`: fonts (Inter + JetBrains Mono), surfaces, borders,
+three-step text, accent/green/red/amber (+ soft), radii/shadows, `--ease`.
+Breakpoints: tablet ≤960px, mobile ≤640px.
 
 ---
 
 ## Contributing notes
 
-- Prefer **native platform features** and existing helpers over new
-  abstractions (see `chartUtils.ts`, `ALGORITHMS`, `COLORS`).
-- New algorithms must: join the `AlgorithmType` union, get a `runAlgorithm`
-  case, appear in `ALGORITHMS` (which automatically updates keys, share
-  whitelist, and both comparison modes), and ship with engine tests
-  (exact timeline + metrics + edge cases).
-- New state that should survive sharing must be added to the share-URL
-  schema — bump `SCHEMA_VERSION` if the format changes incompatibly.
-- Keep validation in `validateProcessInput` as the single source of truth.
-- Run `npx vitest run && npx tsc --noEmit && npm run build` before
-  committing.
+- Prefer native platform features and existing helpers over new deps.
+- New algorithms: add to `AlgorithmType`, `runAlgorithm` case, `ALGORITHMS`
+  (updates keys, share whitelist, comparison modes), policy (if kernel), and
+  engine tests (timeline + metrics + edge cases).
+- New share-visible state → bump `SCHEMA_VERSION` if incompatible.
+- Keep `validateProcessInput` / domain validation as the single source of
+  truth.
+- No LLM or network in the core simulation path.
+- Never leave the repo broken: full gate green before commit.

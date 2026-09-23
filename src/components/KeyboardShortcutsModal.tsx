@@ -9,9 +9,11 @@ const shortcuts = [
   { keys: 'Space', desc: 'Play / pause simulation' },
   { keys: '← / →', desc: 'Step back / forward by 1 ms' },
   { keys: 'R', desc: 'Reset playback to t = 0' },
-  { keys: '1 – 9', desc: 'Switch algorithm (FCFS through Adaptive RR, first 9)' },
-  { keys: 'Shift+1–9', desc: 'Switch algorithm (HRRN through Adaptive RR, 10–17)' },
-  { keys: 'C', desc: 'Cycle view (Visualizer / Benchmark / Race / Experiment)' },
+  { keys: '1–9', desc: 'Select algorithm 1–9 (FCFS … MLFQ)' },
+  { keys: 'Shift+1–8', desc: 'Select algorithm 10–17 (HRRN … Adaptive RR)' },
+  { keys: 'C', desc: 'Cycle view (Visualizer / Benchmark / Race / Experiment / Learning / Interview)' },
+  { keys: 'L', desc: 'Learning mode' },
+  { keys: 'I', desc: 'Interview mode' },
   { keys: 'Ctrl/Cmd + K', desc: 'Open command palette' },
 ];
 

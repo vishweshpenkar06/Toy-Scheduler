@@ -26,8 +26,10 @@ export const COLORS = ['#2563eb', '#0ea5e9', '#10b981', '#f59e0b', '#ef4444', '#
 interface HeaderProps {
   selectedAlgorithm: AlgorithmType;
   onSelectAlgorithm: (alg: AlgorithmType) => void;
-  viewMode: 'visualizer' | 'comparison' | 'race' | 'experiment';
-  onToggleViewMode: (mode: 'visualizer' | 'comparison' | 'race' | 'experiment') => void;
+  viewMode: 'visualizer' | 'comparison' | 'race' | 'experiment' | 'learning' | 'interview';
+  onToggleViewMode: (
+    mode: 'visualizer' | 'comparison' | 'race' | 'experiment' | 'learning' | 'interview'
+  ) => void;
   onOpenPresets: () => void;
   onOpenShortcuts: () => void;
   quantum: number;
@@ -195,11 +197,13 @@ export const Header: React.FC<HeaderProps> = ({
           className={viewMode !== 'visualizer' ? 'btn btn-primary' : 'btn btn-ghost'}
           onClick={() => {
             soundFx.playClick();
-            const order: Array<'visualizer' | 'comparison' | 'race' | 'experiment'> = ['visualizer', 'comparison', 'race', 'experiment'];
+            const order: Array<
+              'visualizer' | 'comparison' | 'race' | 'experiment' | 'learning' | 'interview'
+            > = ['visualizer', 'comparison', 'race', 'experiment', 'learning', 'interview'];
             const idx = order.indexOf(viewMode);
             onToggleViewMode(order[(idx + 1) % order.length]);
           }}
-          title="Cycle view: Visualizer → Benchmark → Race → Experiment"
+          title="Cycle view: Visualizer → Benchmark → Race → Experiment → Learning → Interview"
         >
           {viewMode === 'comparison' ? <GridIcon /> : <BarChartIcon />}
           {viewMode === 'visualizer'
@@ -208,7 +212,11 @@ export const Header: React.FC<HeaderProps> = ({
               ? 'Race'
               : viewMode === 'race'
                 ? 'Experiments'
-                : 'Single view'}
+                : viewMode === 'experiment'
+                  ? 'Learn'
+                  : viewMode === 'learning'
+                    ? 'Interview'
+                    : 'Single view'}
         </button>
       </div>
     </header>

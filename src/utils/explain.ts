@@ -1,7 +1,7 @@
 import { Process, TimelineSlice, DecisionEntry, AlgorithmType } from "../types";
 import { DecisionExplanation, CandidateExplanation } from "../domain/models";
 
-const RULES: Record<string, string> = {
+export const RULES: Record<string, string> = {
   fifo: "First-come first-served: earliest arrival runs next.",
   sjf: "Shortest job first: smallest total burst runs next.",
   srtf: "Shortest remaining time first: preempts when a shorter job arrives.",
