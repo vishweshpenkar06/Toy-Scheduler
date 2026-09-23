@@ -27,6 +27,8 @@ export const ProcessResultsTable = ({ results, processes }: ProcessResultsTableP
               <th>Turnaround</th>
               <th>Waiting</th>
               <th>Response</th>
+              <th title="Context switches">CS</th>
+              <th title="Deadline missed">Miss</th>
             </tr>
           </thead>
           <tbody>
@@ -46,6 +48,10 @@ export const ProcessResultsTable = ({ results, processes }: ProcessResultsTableP
                   <td className="num">{r.turnaroundTime} ms</td>
                   <td className="num cell-accent">{r.waitingTime} ms</td>
                   <td className="num">{r.responseTime} ms</td>
+                  <td className="num cell-muted">{r.contextSwitches ?? 0}</td>
+                  <td className="num" style={{ color: r.deadlineMiss ? 'var(--red, #ef4444)' : 'var(--text-3)' }}>
+                    {p?.deadline != null ? (r.deadlineMiss ? 'miss' : 'ok') : '—'}
+                  </td>
                 </tr>
               );
             })}

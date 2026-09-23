@@ -7,6 +7,7 @@ import { niceStep, buildColorMap } from '../utils/chartUtils';
 interface RaceModeProps {
   processes: Process[];
   quantum: number;
+  contextSwitchCost?: number;
   currentTimeStep: number;
   onSelectAlgorithm: (alg: AlgorithmType) => void;
 }
@@ -21,11 +22,17 @@ interface RaceEntry {
 
 const MINI_TRACK_HEIGHT = 36;
 
-export const RaceMode: React.FC<RaceModeProps> = ({ processes, quantum, currentTimeStep, onSelectAlgorithm }) => {
+export const RaceMode: React.FC<RaceModeProps> = ({
+  processes,
+  quantum,
+  contextSwitchCost = 0,
+  currentTimeStep,
+  onSelectAlgorithm,
+}) => {
   const entries: RaceEntry[] = useMemo(() => {
     if (processes.length === 0) return [];
     return ALGORITHMS.map((alg) => {
-      const result = runAlgorithm(alg.id, processes, { quantum });
+      const result = runAlgorithm(alg.id, processes, { quantum, contextSwitchCost });
       const totalTime = result.timeline.length > 0 ? result.timeline[result.timeline.length - 1].end : 0;
       return {
         id: alg.id,
@@ -35,7 +42,7 @@ export const RaceMode: React.FC<RaceModeProps> = ({ processes, quantum, currentT
         isFinished: currentTimeStep >= totalTime,
       };
     });
-  }, [processes, quantum, currentTimeStep]);
+  }, [processes, quantum, contextSwitchCost, currentTimeStep]);
 
   if (processes.length === 0) {
     return (
@@ -74,9 +81,9 @@ export const RaceMode: React.FC<RaceModeProps> = ({ processes, quantum, currentT
           .map((entry, rank) => {
             const isBest = entry.id === bestEntry?.id;
             const busyTime = entry.result.timeline
-              .filter((s) => s.pid !== 'idle')
+              .filter((s) => s.pid !== 'idle' && s.kind !== 'CONTEXT_SWITCH' && s.kind !== 'IO')
               .reduce((sum, s) => sum + (s.end - s.start), 0);
-            const contextSwitches = entry.result.timeline.filter((s) => s.pid !== 'idle').length;
+            const contextSwitches = entry.result.metrics?.contextSwitchCount ?? 0;
 
             return (
               <div
@@ -204,9 +211,9 @@ export const RaceMode: React.FC<RaceModeProps> = ({ processes, quantum, currentT
                   </span>
                   <span>Avg wait: <strong>{entry.result.averageWaitingTime.toFixed(1)}ms</strong></span>
                   <span>CPU util: <strong style={{ color: 'var(--green)' }}>
-                    {entry.totalTime > 0 ? ((busyTime / entry.totalTime) * 100).toFixed(0) : 0}%
+                    {entry.totalTime > 0 ? ((busyTime / (entry.totalTime * 1)) * 100).toFixed(0) : 0}%
                   </strong></span>
-                  <span>Slices: <strong>{contextSwitches}</strong></span>
+                  <span>CS: <strong>{contextSwitches}</strong></span>
                 </div>
               </div>
             );

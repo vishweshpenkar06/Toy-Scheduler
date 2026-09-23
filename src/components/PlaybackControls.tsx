@@ -5,10 +5,12 @@ interface PlaybackControlsProps {
   onStepBack: () => void;
   onStepForward: () => void;
   onReset: () => void;
+  onJumpToEvent?: (direction: 'prev' | 'next') => void;
   currentTimeStep: number;
   maxTime: number;
   speed: number;
   onChangeSpeed: (speed: number) => void;
+  onSeek?: (t: number) => void;
 }
 
 const SkipIcon = ({ direction }: { direction: 'back' | 'fwd' }) => (
@@ -47,22 +49,49 @@ const PauseIcon = () => (
   </svg>
 );
 
+const EventIcon = ({ dir }: { dir: 'prev' | 'next' }) => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+    {dir === 'prev' ? (
+      <>
+        <polyline points="11 17 6 12 11 7" />
+        <polyline points="18 17 13 12 18 7" />
+      </>
+    ) : (
+      <>
+        <polyline points="13 17 18 12 13 7" />
+        <polyline points="6 17 11 12 6 7" />
+      </>
+    )}
+  </svg>
+);
+
 export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
   isPlaying,
   onTogglePlay,
   onStepBack,
   onStepForward,
   onReset,
+  onJumpToEvent,
   currentTimeStep,
   maxTime,
   speed,
   onChangeSpeed,
+  onSeek,
 }) => {
+  const canEvent = !!onJumpToEvent;
   return (
     <div className="transport">
       <div className="transport-group">
         <button className="tbtn" onClick={onReset} title="Reset to start (t = 0)">
           <ResetIcon />
+        </button>
+        <button
+          className="tbtn"
+          onClick={() => onJumpToEvent?.('prev')}
+          disabled={!canEvent || currentTimeStep <= 0}
+          title="Previous event"
+        >
+          <EventIcon dir="prev" />
         </button>
         <button className="tbtn" onClick={onStepBack} disabled={currentTimeStep <= 0} title="Step back 1 ms">
           <SkipIcon direction="back" />
@@ -73,10 +102,30 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
         <button className="tbtn" onClick={onStepForward} disabled={currentTimeStep >= maxTime} title="Step forward 1 ms">
           <SkipIcon direction="fwd" />
         </button>
+        <button
+          className="tbtn"
+          onClick={() => onJumpToEvent?.('next')}
+          disabled={!canEvent || currentTimeStep >= maxTime}
+          title="Next event"
+        >
+          <EventIcon dir="next" />
+        </button>
       </div>
 
       <div className="transport-info">
         <strong>{currentTimeStep}</strong> / {maxTime} ms
+        {onSeek && (
+          <input
+            className="transport-scrub"
+            type="range"
+            min={0}
+            max={Math.max(1, maxTime)}
+            value={Math.min(currentTimeStep, maxTime)}
+            onChange={(e) => onSeek(parseInt(e.target.value, 10))}
+            aria-label="Seek simulation time"
+            style={{ marginLeft: 8, width: 120, accentColor: 'var(--accent)' }}
+          />
+        )}
       </div>
 
       <div className="transport-right">

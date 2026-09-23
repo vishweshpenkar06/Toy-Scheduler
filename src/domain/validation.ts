@@ -29,6 +29,10 @@ export function validateProcessSpec(spec: ProcessSpec): string | null {
     if (err) return err;
   }
   if (spec.ioBursts) {
+    const cpuCount = spec.cpuBursts.length;
+    if (spec.ioBursts.length >= cpuCount) {
+      return `Process ${spec.pid} must end with a CPU burst (io bursts < cpu bursts)`;
+    }
     for (let i = 0; i < spec.ioBursts.length; i++) {
       const err = validateBurst(spec.ioBursts[i], spec.pid, i, "io");
       if (err) return err;

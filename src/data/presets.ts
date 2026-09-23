@@ -62,4 +62,69 @@ export const PRESET_WORKLOADS: PresetWorkload[] = [
       { pid: 'P4', arrivalTime: 5, burstTime: 6, priority: 2, color: '#2563eb' },
     ],
   },
+  {
+    id: 'io-bursts',
+    name: 'CPU / I/O Burst Workload',
+    description: 'Processes alternate CPU and I/O bursts — shows BLOCKED state and multi-burst timelines.',
+    defaultAlgorithm: 'roundRobin',
+    defaultQuantum: 3,
+    processes: [
+      {
+        pid: 'P1', arrivalTime: 0, burstTime: 8, color: '#2563eb',
+        bursts: [
+          { type: 'cpu', duration: 3 }, { type: 'io', duration: 2 },
+          { type: 'cpu', duration: 3 }, { type: 'io', duration: 1 },
+          { type: 'cpu', duration: 2 },
+        ],
+      },
+      {
+        pid: 'P2', arrivalTime: 0, burstTime: 7, color: '#0ea5e9',
+        bursts: [
+          { type: 'cpu', duration: 4 }, { type: 'io', duration: 3 },
+          { type: 'cpu', duration: 3 },
+        ],
+      },
+      {
+        pid: 'P3', arrivalTime: 1, burstTime: 6, color: '#10b981',
+        bursts: [
+          { type: 'cpu', duration: 2 }, { type: 'io', duration: 4 },
+          { type: 'cpu', duration: 4 },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'deadline-edf',
+    name: 'Deadline Workload (EDF / RMS)',
+    description: 'Periodic-style tasks with absolute deadlines — compare EDF and RMS deadline misses.',
+    defaultAlgorithm: 'edf',
+    processes: [
+      { pid: 'T1', arrivalTime: 0, burstTime: 4, deadline: 10, period: 10, color: '#ef4444' },
+      { pid: 'T2', arrivalTime: 0, burstTime: 3, deadline: 8, period: 8, color: '#f59e0b' },
+      { pid: 'T3', arrivalTime: 0, burstTime: 2, deadline: 6, period: 6, color: '#10b981' },
+    ],
+  },
+  {
+    id: 'lottery-weights',
+    name: 'Weighted Fairness (Lottery / Stride / WFQ)',
+    description: 'Unequal tickets and weights — compare proportional-share algorithms.',
+    defaultAlgorithm: 'lottery',
+    processes: [
+      { pid: 'Heavy', arrivalTime: 0, burstTime: 16, tickets: 8, weight: 8, color: '#2563eb' },
+      { pid: 'Medium', arrivalTime: 0, burstTime: 8, tickets: 4, weight: 4, color: '#0ea5e9' },
+      { pid: 'Light', arrivalTime: 0, burstTime: 4, tickets: 1, weight: 1, color: '#10b981' },
+    ],
+  },
+  {
+    id: 'hrrn-mix',
+    name: 'Mixed Burst HRRN Showcase',
+    description: 'Varying service times without preemption — highlights response-ratio ordering.',
+    defaultAlgorithm: 'hrrn',
+    processes: [
+      { pid: 'P1', arrivalTime: 0, burstTime: 6, color: '#8b5cf6' },
+      { pid: 'P2', arrivalTime: 1, burstTime: 2, color: '#ec4899' },
+      { pid: 'P3', arrivalTime: 2, burstTime: 4, color: '#f59e0b' },
+      { pid: 'P4', arrivalTime: 3, burstTime: 1, color: '#10b981' },
+    ],
+  },
 ];

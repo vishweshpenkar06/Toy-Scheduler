@@ -11,6 +11,14 @@ export const ALGORITHMS: AlgorithmInfo[] = [
   { id: 'priorityAging', name: 'Priority + Aging', shortName: 'Pri+Aging', description: 'Priority scheduling with aging to prevent starvation', isPreemptive: true, requiresPriority: true },
   { id: 'multiLevelQueue', name: 'Multilevel Queue', shortName: 'MLQ', description: 'Fixed priority queues with FIFO per level', isPreemptive: false },
   { id: 'multiLevelFeedback', name: 'MLFQ', shortName: 'MLFQ', description: 'Multilevel feedback queue with aging and demotion', isPreemptive: true, requiresQuantum: true },
+  { id: 'hrrn', name: 'HRRN', shortName: 'HRRN', description: 'Highest Response Ratio Next (non-preemptive)', isPreemptive: false },
+  { id: 'lrtf', name: 'LRTF', shortName: 'LRTF', description: 'Longest Remaining Time First (preemptive)', isPreemptive: true },
+  { id: 'lottery', name: 'Lottery', shortName: 'Lottery', description: 'Probabilistic scheduling by ticket weight', isPreemptive: true },
+  { id: 'stride', name: 'Stride', shortName: 'Stride', description: 'Deterministic proportional-share scheduling', isPreemptive: true },
+  { id: 'wfq', name: 'WFQ', shortName: 'WFQ', description: 'Weighted Fair Queuing by virtual finish time', isPreemptive: true },
+  { id: 'edf', name: 'EDF', shortName: 'EDF', description: 'Earliest Deadline First (preemptive)', isPreemptive: true },
+  { id: 'rms', name: 'RMS', shortName: 'RMS', description: 'Rate Monotonic — static priority by period', isPreemptive: true },
+  { id: 'adaptive', name: 'Adaptive RR', shortName: 'Adapt RR', description: 'Round Robin with adaptive quantum and anti-starvation', isPreemptive: true, requiresQuantum: true },
 ];
 
 export const COLORS = ['#2563eb', '#0ea5e9', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#64748b'];
@@ -18,14 +26,16 @@ export const COLORS = ['#2563eb', '#0ea5e9', '#10b981', '#f59e0b', '#ef4444', '#
 interface HeaderProps {
   selectedAlgorithm: AlgorithmType;
   onSelectAlgorithm: (alg: AlgorithmType) => void;
-  viewMode: 'visualizer' | 'comparison' | 'race';
-  onToggleViewMode: (mode: 'visualizer' | 'comparison' | 'race') => void;
+  viewMode: 'visualizer' | 'comparison' | 'race' | 'experiment';
+  onToggleViewMode: (mode: 'visualizer' | 'comparison' | 'race' | 'experiment') => void;
   onOpenPresets: () => void;
   onOpenShortcuts: () => void;
   quantum: number;
   onChangeQuantum: (q: number) => void;
   coreCount: number;
   onChangeCoreCount: (c: number) => void;
+  contextSwitchCost: number;
+  onChangeContextSwitchCost: (c: number) => void;
   soundEnabled: boolean;
   onToggleSound: () => void;
   shareCopied: boolean;
@@ -78,6 +88,8 @@ export const Header: React.FC<HeaderProps> = ({
   onChangeQuantum,
   coreCount,
   onChangeCoreCount,
+  contextSwitchCost,
+  onChangeContextSwitchCost,
   soundEnabled,
   onToggleSound,
   shareCopied,
@@ -130,20 +142,34 @@ export const Header: React.FC<HeaderProps> = ({
         )}
 
         {viewMode === 'visualizer' && (
-          <div className="quantum">
-            <label className="quantum-label" htmlFor="core-count">Cores</label>
-            <select
-              id="core-count"
-              className="select"
-              value={coreCount}
-              onChange={(e) => onChangeCoreCount(parseInt(e.target.value, 10))}
-            >
-              <option value={1}>1</option>
-              <option value={2}>2</option>
-              <option value={3}>3</option>
-              <option value={4}>4</option>
-            </select>
-          </div>
+          <>
+            <div className="quantum">
+              <label className="quantum-label" htmlFor="core-count">Cores</label>
+              <select
+                id="core-count"
+                className="select"
+                value={coreCount}
+                onChange={(e) => onChangeCoreCount(parseInt(e.target.value, 10))}
+              >
+                <option value={1}>1</option>
+                <option value={2}>2</option>
+                <option value={3}>3</option>
+                <option value={4}>4</option>
+              </select>
+            </div>
+            <div className="quantum">
+              <label className="quantum-label" htmlFor="cs-cost" title="Context-switch overhead per switch (ms)">CS cost</label>
+              <input
+                id="cs-cost"
+                className="quantum-input"
+                type="number"
+                min={0}
+                max={10}
+                value={contextSwitchCost}
+                onChange={(e) => onChangeContextSwitchCost(Math.max(0, parseInt(e.target.value, 10) || 0))}
+              />
+            </div>
+          </>
         )}
       </div>
 
@@ -169,11 +195,20 @@ export const Header: React.FC<HeaderProps> = ({
           className={viewMode !== 'visualizer' ? 'btn btn-primary' : 'btn btn-ghost'}
           onClick={() => {
             soundFx.playClick();
-            onToggleViewMode(viewMode === 'visualizer' ? 'comparison' : viewMode === 'comparison' ? 'race' : 'visualizer');
+            const order: Array<'visualizer' | 'comparison' | 'race' | 'experiment'> = ['visualizer', 'comparison', 'race', 'experiment'];
+            const idx = order.indexOf(viewMode);
+            onToggleViewMode(order[(idx + 1) % order.length]);
           }}
+          title="Cycle view: Visualizer → Benchmark → Race → Experiment"
         >
           {viewMode === 'comparison' ? <GridIcon /> : <BarChartIcon />}
-          {viewMode === 'visualizer' ? 'Compare all' : viewMode === 'comparison' ? 'Race' : 'Single view'}
+          {viewMode === 'visualizer'
+            ? 'Compare all'
+            : viewMode === 'comparison'
+              ? 'Race'
+              : viewMode === 'race'
+                ? 'Experiments'
+                : 'Single view'}
         </button>
       </div>
     </header>

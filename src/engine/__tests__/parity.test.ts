@@ -47,6 +47,16 @@ const workloads: [string, Process[]][] = [
   ["simultaneous", simultaneous],
 ];
 
+function coreMetrics(results: { pid: string; waitingTime: number; turnaroundTime: number; responseTime: number; completionTime: number }[]) {
+  return results.map((r) => ({
+    pid: r.pid,
+    waitingTime: r.waitingTime,
+    turnaroundTime: r.turnaroundTime,
+    responseTime: r.responseTime,
+    completionTime: r.completionTime,
+  }));
+}
+
 function expectParity(
   algorithm: AlgorithmType,
   procs: Process[],
@@ -60,7 +70,9 @@ function expectParity(
     execTimeline(kernel.timeline),
     `${algorithm} timeline ${label}`
   ).toBe(execTimeline(legacy.timeline));
-  expect(kernel.processResults, `${algorithm} metrics ${label}`).toEqual(legacy.processResults);
+  expect(coreMetrics(kernel.processResults), `${algorithm} metrics ${label}`).toEqual(
+    coreMetrics(legacy.processResults)
+  );
   expect(kernel.averageWaitingTime).toBeCloseTo(legacy.averageWaitingTime, 10);
   expect(kernel.averageTurnaroundTime).toBeCloseTo(legacy.averageTurnaroundTime, 10);
   expect(kernel.averageResponseTime).toBeCloseTo(legacy.averageResponseTime, 10);

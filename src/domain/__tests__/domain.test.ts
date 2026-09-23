@@ -53,10 +53,22 @@ describe("validateProcessSpec", () => {
   it("accepts CPU and IO burst sequences", () => {
     const spec = {
       ...baseSpec,
-      cpuBursts: [{ type: "cpu" as const, duration: 4 }],
+      cpuBursts: [
+        { type: "cpu" as const, duration: 4 },
+        { type: "cpu" as const, duration: 3 },
+      ],
       ioBursts: [{ type: "io" as const, duration: 6 }],
     };
     expect(validateProcessSpec(spec)).toBeNull();
+  });
+
+  it("rejects IO bursts that would not end on CPU", () => {
+    const spec = {
+      ...baseSpec,
+      cpuBursts: [{ type: "cpu" as const, duration: 4 }],
+      ioBursts: [{ type: "io" as const, duration: 6 }],
+    };
+    expect(validateProcessSpec(spec)).toMatch(/must end with a CPU burst/);
   });
 
   it("rejects deadline before arrival", () => {
@@ -111,7 +123,7 @@ describe("bridge", () => {
     expect(createRuntime({ ...baseSpec, arrivalTime: 3 }).state).toBe("NEW");
   });
 
-  it("runtime remainingCpu equals total cpu time", () => {
+  it("runtime remainingCpu equals first cpu burst (multi-burst advances per burst)", () => {
     const rt = createRuntime({
       ...baseSpec,
       cpuBursts: [
@@ -119,7 +131,11 @@ describe("bridge", () => {
         { type: "cpu", duration: 3 },
       ],
     });
-    expect(rt.remainingCpu).toBe(5);
+    expect(rt.remainingCpu).toBe(2);
+    expect(totalCpuTime({ ...baseSpec, cpuBursts: [
+      { type: "cpu", duration: 2 },
+      { type: "cpu", duration: 3 },
+    ] })).toBe(5);
   });
 });
 

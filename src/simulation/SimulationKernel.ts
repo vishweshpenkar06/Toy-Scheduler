@@ -9,12 +9,13 @@ import {
   SimulationResult,
   DEFAULT_SYSTEM_CONFIG,
 } from "../domain/models";
-import { toProcessSpecs } from "../domain/bridge";
+import { toProcessSpecs, interleavedBursts } from "../domain/bridge";
 import { validateProcessSpecs, totalCpuTime } from "../domain/validation";
 import { createRuntime } from "../domain/bridge";
 import { Process } from "../types";
 import { EventQueue } from "./EventQueue";
 import { SchedulerContext, SchedulerPolicy } from "./policy";
+import { computeExtendedMetrics } from "../engine/metrics";
 
 interface RunningSlot {
   coreId: number;
@@ -36,16 +37,26 @@ function emptyResult(): SimulationResult {
     averageTurnaroundTime: 0,
     averageResponseTime: 0,
     events: [],
+    metrics: {
+      throughput: 0,
+      cpuUtilization: 0,
+      contextSwitchCount: 0,
+      jainFairness: 1,
+      waitingP50: 0,
+      waitingP95: 0,
+      deadlineMisses: 0,
+    },
   };
 }
 
 export class SimulationKernel {
   private policy: SchedulerPolicy;
   private system: SystemConfig;
+  private seed: number;
   private runtimes = new Map<string, ProcessRuntime>();
-  private specs = new Map<string, ReturnType<typeof toProcessSpecs>[number]>();
   private cores: CoreRuntime[] = [];
   private ready: ProcessRuntime[] = [];
+  private blocked = new Map<string, { start: number; end: number }>();
   private eventQueue = new EventQueue();
   private events: SimulationEvent[] = [];
   private timeline: TimelineSlice[] = [];
@@ -53,10 +64,23 @@ export class SimulationKernel {
   private eventSeq = 0;
   private dispatchSeq = 0;
   private running = new Map<number, RunningSlot>();
+  private contextSwitchCount = 0;
+  private rngState: number;
 
   constructor(policy: SchedulerPolicy, options: KernelOptions = {}) {
     this.policy = policy;
     this.system = { ...DEFAULT_SYSTEM_CONFIG, ...options.system };
+    this.seed = options.seed ?? 1;
+    this.rngState = this.seed >>> 0 || 1;
+  }
+
+  nextRandom(): number {
+    let x = this.rngState;
+    x ^= x << 13;
+    x ^= x >>> 17;
+    x ^= x << 5;
+    this.rngState = x >>> 0;
+    return this.rngState / 0xffffffff;
   }
 
   private emit(time: number, type: SimulationEventType, opts: { pid?: string; core?: number; payload?: Record<string, unknown> } = {}): void {
@@ -79,6 +103,7 @@ export class SimulationKernel {
       all: this.runtimes,
       system: this.system,
       schedule: (time, type, opts) => this.emit(time, type, opts ?? {}),
+      random: () => this.nextRandom(),
     };
   }
 
@@ -116,7 +141,31 @@ export class SimulationKernel {
     this.timeline.push({ pid: "idle", start: from, end: to, core: 0, kind: "IDLE" });
   }
 
-  private stopRunning(coreId: number, reason: "COMPLETED" | "PREEMPTED" | "QUANTUM_EXPIRED"): void {
+  private hasPendingWork(): boolean {
+    if (this.ready.length > 0 || this.blocked.size > 0) return true;
+    for (const rt of this.runtimes.values()) {
+      if (rt.state === "NEW") return true;
+    }
+    return false;
+  }
+
+  private startContextSwitch(coreId: number): void {
+    const cost = this.system.contextSwitchCost;
+    if (cost <= 0) return;
+    const core = this.cores[coreId];
+    const csEnd = this.time + cost;
+    this.timeline.push({ pid: "idle", start: this.time, end: csEnd, core: coreId, kind: "CONTEXT_SWITCH" });
+    core.freeAt = csEnd;
+    core.state = "CONTEXT_SWITCH";
+    core.contextSwitches += 1;
+    this.contextSwitchCount += 1;
+    this.emit(csEnd, "CONTEXT_SWITCH_COMPLETE", { core: coreId });
+  }
+
+  private stopRunning(
+    coreId: number,
+    reason: "COMPLETED" | "PREEMPTED" | "QUANTUM_EXPIRED" | "BLOCKED"
+  ): void {
     const slot = this.running.get(coreId);
     if (!slot) return;
     const rt = this.runtimes.get(slot.pid);
@@ -141,21 +190,49 @@ export class SimulationKernel {
       rt.state = "TERMINATED";
       rt.completionTime = this.time;
       rt.responseTime ??= Math.max(0, slot.dispatchTime - rt.spec.arrivalTime);
-      this.policy.onProcessStop?.(rt, reason, this.makeContext());
+      this.policy.onProcessStop?.(rt, "COMPLETED", this.makeContext());
       this.emit(this.time, "PROCESS_TERMINATE", { pid: rt.pid, core: coreId });
-      this.emit(this.time, "CPU_BURST_COMPLETE", { pid: rt.pid, core: coreId, payload: { dispatchSeq: slot.dispatchSeq } });
+      if (this.hasPendingWork()) this.startContextSwitch(coreId);
+    } else if (reason === "BLOCKED") {
+      rt.contextSwitches += 1;
+      core.contextSwitches += 1;
+      this.policy.onProcessStop?.(rt, reason, this.makeContext());
+      if (this.hasPendingWork()) this.startContextSwitch(coreId);
     } else {
       rt.preemptions += reason === "PREEMPTED" ? 1 : 0;
       rt.contextSwitches += 1;
       core.contextSwitches += 1;
       this.policy.onProcessStop?.(rt, reason, this.makeContext());
+      this.pushReady(rt);
+      if (this.hasPendingWork()) this.startContextSwitch(coreId);
       if (reason === "QUANTUM_EXPIRED") {
         this.emit(this.time, "QUANTUM_EXPIRE", { pid: rt.pid, core: coreId, payload: { dispatchSeq: slot.dispatchSeq } });
       } else {
         this.emit(this.time, "PREEMPT", { pid: rt.pid, core: coreId, payload: { dispatchSeq: slot.dispatchSeq } });
       }
-      this.pushReady(rt);
     }
+  }
+
+  private advanceBurst(rt: ProcessRuntime): "terminate" | "io" | "cpu" {
+    const bursts = interleavedBursts(rt.spec);
+    if (rt.currentBurstIndex >= bursts.length - 1) return "terminate";
+    const next = bursts[rt.currentBurstIndex + 1];
+    if (next.type === "io") return "io";
+    rt.currentBurstIndex += 1;
+    rt.remainingCpu = next.duration;
+    return "cpu";
+  }
+
+  private beginIo(rt: ProcessRuntime, coreId: number): void {
+    const bursts = interleavedBursts(rt.spec);
+    const ioBurst = bursts[rt.currentBurstIndex + 1];
+    if (!ioBurst || ioBurst.type !== "io") return;
+    rt.state = "BLOCKED";
+    rt.remainingIo = ioBurst.duration;
+    const end = this.time + ioBurst.duration;
+    this.blocked.set(rt.pid, { start: this.time, end });
+    this.timeline.push({ pid: rt.pid, start: this.time, end, core: coreId, kind: "IO" });
+    this.emit(end, "IO_COMPLETE", { pid: rt.pid, core: coreId });
   }
 
   private preemptWorstIfNeeded(runningSlots: RunningSlot[]): boolean {
@@ -182,6 +259,10 @@ export class SimulationKernel {
 
   private dispatchOn(coreId: number): boolean {
     if (this.running.has(coreId)) return false;
+    const core = this.cores[coreId];
+    if (this.time < core.freeAt) return false;
+    if (core.state === "CONTEXT_SWITCH") return false;
+
     const context = this.makeContext();
     const selected = this.policy.selectNext([...this.ready], context);
     if (!selected) return false;
@@ -196,7 +277,6 @@ export class SimulationKernel {
       selected.contextSwitches += 1;
     }
 
-    const core = this.cores[coreId];
     core.state = "RUNNING";
     core.runningPid = selected.pid;
     this.dispatchSeq += 1;
@@ -256,15 +336,6 @@ export class SimulationKernel {
   }
 
   private handleEvent(event: SimulationEvent): void {
-    if (event.time > this.time) {
-      const anyRunning = this.running.size > 0;
-      this.advanceRunning(event.time);
-      if (!anyRunning) {
-        this.emitIdle(this.time, event.time);
-      }
-      this.time = event.time;
-    }
-
     this.policy.onTick?.(this.makeContext());
 
     switch (event.type) {
@@ -283,7 +354,7 @@ export class SimulationKernel {
 
           const hasFreeCore = this.running.size < this.cores.length;
           if (hasFreeCore) {
-            // Free core available — dispatch handles it (true multi-core)
+            // free core — dispatch handles it
           } else if (wasAlone && runningSlots.length > 0) {
             this.stopRunning(runningSlots[0].coreId, "PREEMPTED");
           } else if (this.policy.shouldPreempt && runningSlots.length > 0) {
@@ -299,7 +370,36 @@ export class SimulationKernel {
           this.advanceRunning(this.time);
           const rt = this.runtimes.get(event.pid!);
           if (rt && rt.remainingCpu <= 0) {
-            this.stopRunning(event.core!, "COMPLETED");
+            const next = this.advanceBurst(rt);
+            if (next === "terminate") {
+              this.stopRunning(event.core!, "COMPLETED");
+            } else if (next === "io") {
+              this.stopRunning(event.core!, "BLOCKED");
+              this.beginIo(rt, event.core!);
+            } else {
+              // next CPU burst without IO — requeue
+              this.stopRunning(event.core!, "PREEMPTED");
+            }
+          }
+        }
+        break;
+      }
+      case "IO_COMPLETE": {
+        const rt = this.runtimes.get(event.pid!);
+        if (rt && rt.state === "BLOCKED") {
+            const interval = this.blocked.get(rt.pid);
+            if (interval) {
+              interval.end = this.time;
+              this.blocked.delete(rt.pid);
+            }
+          const bursts = interleavedBursts(rt.spec);
+          // currentBurstIndex points at the CPU burst before this IO; skip IO to next CPU
+          const nextCpuIdx = rt.currentBurstIndex + 2;
+          if (nextCpuIdx < bursts.length && bursts[nextCpuIdx].type === "cpu") {
+            rt.currentBurstIndex = nextCpuIdx;
+            rt.remainingCpu = bursts[nextCpuIdx].duration;
+            rt.remainingIo = 0;
+            this.pushReady(rt);
           }
         }
         break;
@@ -340,6 +440,13 @@ export class SimulationKernel {
         }
         break;
       }
+      case "CONTEXT_SWITCH_COMPLETE": {
+        const core = event.core !== undefined ? this.cores[event.core] : undefined;
+        if (core && core.state === "CONTEXT_SWITCH") {
+          core.state = "IDLE";
+        }
+        break;
+      }
       default:
         break;
     }
@@ -348,8 +455,9 @@ export class SimulationKernel {
   private processEvent(event: SimulationEvent): void {
     if (event.time > this.time) {
       const anyRunning = this.running.size > 0;
+      const anyCs = this.cores.some((c) => c.state === "CONTEXT_SWITCH");
       this.advanceRunning(event.time);
-      if (!anyRunning) {
+      if (!anyRunning && !anyCs) {
         this.emitIdle(this.time, event.time);
       }
       this.time = event.time;
@@ -371,6 +479,28 @@ export class SimulationKernel {
     }
   }
 
+  private computeProcessResults(): ProcessResult[] {
+    const processResults: ProcessResult[] = [];
+    for (const rt of this.runtimes.values()) {
+      const completion = rt.completionTime ?? 0;
+      const turnaround = completion - rt.spec.arrivalTime;
+      const waiting = turnaround - totalCpuTime(rt.spec);
+      const response = rt.responseTime ?? 0;
+      const deadlineMiss =
+        rt.spec.deadline !== undefined ? completion > rt.spec.deadline : undefined;
+      processResults.push({
+        pid: rt.pid,
+        waitingTime: waiting,
+        turnaroundTime: turnaround,
+        responseTime: response,
+        completionTime: completion,
+        contextSwitches: rt.contextSwitches,
+        ...(deadlineMiss !== undefined ? { deadlineMiss } : {}),
+      });
+    }
+    return processResults;
+  }
+
   run(processes: Process[]): SimulationResult {
     if (processes.length === 0) return emptyResult();
 
@@ -389,7 +519,6 @@ export class SimulationKernel {
     }));
 
     for (const spec of specs) {
-      this.specs.set(spec.pid, spec);
       this.runtimes.set(spec.pid, createRuntime(spec));
       this.emit(spec.arrivalTime, "PROCESS_ARRIVAL", { pid: spec.pid });
     }
@@ -407,28 +536,27 @@ export class SimulationKernel {
         this.stopRunning(coreId, "COMPLETED");
       }
       this.time = maxEnd;
+      this.runEventLoop();
     }
 
     this.timeline.sort((a, b) => a.start - b.start || (a.core ?? 0) - (b.core ?? 0));
 
-    const processResults: ProcessResult[] = [];
-    for (const rt of this.runtimes.values()) {
-      const completion = rt.completionTime ?? 0;
-      const turnaround = completion - rt.spec.arrivalTime;
-      const waiting = turnaround - totalCpuTime(rt.spec);
-      const response = rt.responseTime ?? 0;
-      processResults.push({
-        pid: rt.pid,
-        waitingTime: waiting,
-        turnaroundTime: turnaround,
-        responseTime: response,
-        completionTime: completion,
-      });
-    }
-
+    const processResults = this.computeProcessResults();
     const n = processResults.length || 1;
     const avg = (pick: (r: ProcessResult) => number) =>
       processResults.reduce((s, r) => s + pick(r), 0) / n;
+
+    const span = this.timeline.reduce((m, s) => Math.max(m, s.end), 0);
+    const metrics = computeExtendedMetrics({
+      processResults,
+      timeline: this.timeline,
+      span,
+      coreCount,
+      contextSwitchCount: this.contextSwitchCount,
+      processCount: processResults.length,
+      deadlines: processResults.filter((r) => r.deadlineMiss !== undefined).length,
+      deadlineMisses: processResults.filter((r) => r.deadlineMiss).length,
+    });
 
     return {
       timeline: this.timeline,
@@ -437,6 +565,7 @@ export class SimulationKernel {
       averageTurnaroundTime: avg((r) => r.turnaroundTime),
       averageResponseTime: avg((r) => r.responseTime),
       events: this.events,
+      metrics,
     };
   }
 }

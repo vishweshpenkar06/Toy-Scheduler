@@ -764,8 +764,36 @@ select {
    ------------------------------------------------------------- */
 .stat-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
   gap: 12px;
+}
+
+.state-board {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.state-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border: 1px solid;
+  border-radius: var(--radius-md, 8px);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.state-pid {
+  font-weight: 700;
+}
+
+.state-label {
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  font-size: 10px;
 }
 
 .stat {
@@ -1033,6 +1061,28 @@ select {
 .gantt-block.active {
   outline: 2px solid var(--text-1);
   outline-offset: 1px;
+}
+
+.gantt-block.cs {
+  background-image: repeating-linear-gradient(
+    -45deg,
+    transparent,
+    transparent 3px,
+    rgba(255, 255, 255, 0.25) 3px,
+    rgba(255, 255, 255, 0.25) 4px
+  );
+  color: var(--text-2);
+}
+
+.gantt-block.io {
+  background-image: repeating-linear-gradient(
+    -45deg,
+    transparent,
+    transparent 3px,
+    rgba(255, 255, 255, 0.2) 3px,
+    rgba(255, 255, 255, 0.2) 4px
+  );
+  color: var(--text-1);
 }
 
 .gantt-tip {
@@ -1457,6 +1507,78 @@ select {
   border-bottom-width: 2px;
   border-radius: var(--radius-sm);
   padding: 2px 8px;
+}
+
+.palette-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.45);
+  z-index: 1000;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 12vh;
+}
+
+.palette {
+  width: min(520px, calc(100vw - 32px));
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 16px 48px rgba(15, 23, 42, 0.28);
+  overflow: hidden;
+}
+
+.palette-input {
+  width: 100%;
+  border: none;
+  outline: none;
+  padding: 14px 16px;
+  font-size: 14px;
+  background: transparent;
+  color: var(--text-1);
+  border-bottom: 1px solid var(--border);
+}
+
+.palette-list {
+  max-height: 320px;
+  overflow: auto;
+  padding: 6px;
+}
+
+.palette-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: none;
+  background: transparent;
+  color: var(--text-1);
+  font-size: 13px;
+  padding: 9px 12px;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+}
+
+.palette-item.active,
+.palette-item:hover {
+  background: var(--surface-2);
+}
+
+.palette-empty {
+  padding: 16px;
+  color: var(--text-3);
+  font-size: 13px;
+  text-align: center;
+}
+
+.palette-foot {
+  display: flex;
+  gap: 14px;
+  padding: 8px 14px;
+  border-top: 1px solid var(--border);
+  font-size: 11px;
+  color: var(--text-3);
+  background: var(--surface-2);
 }
 
 /* Utilities */

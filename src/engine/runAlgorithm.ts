@@ -1,4 +1,4 @@
-import { Process, AlgorithmType, SimulationResult } from "../types";
+import { Process, AlgorithmType, SimulationResult, RunOptions } from "../types";
 import { SimulationKernel } from "../simulation/SimulationKernel";
 import {
   fcfsPolicy,
@@ -9,6 +9,14 @@ import {
   agingPolicy,
   multiLevelQueuePolicy,
   multiLevelFeedbackPolicy,
+  hrrnPolicy,
+  lrtfPolicy,
+  lotteryPolicy,
+  stridePolicy,
+  wfqPolicy,
+  edfPolicy,
+  rmsPolicy,
+  adaptivePolicy,
 } from "../simulation/policies";
 import { SchedulerPolicy } from "../simulation/policy";
 import { fifo, sjf, srtf, roundRobin, priorityScheduling, priorityAgingScheduling, multiLevelQueueScheduling, multiLevelFeedbackQueueScheduling } from "./scheduler";
@@ -29,6 +37,7 @@ export function createPolicy(
   algorithm: AlgorithmType,
   options?: { quantum?: number }
 ): SchedulerPolicy {
+  const q = options?.quantum ?? 2;
   switch (algorithm) {
     case "fifo":
       return fcfsPolicy;
@@ -37,7 +46,7 @@ export function createPolicy(
     case "srtf":
       return srtfPolicy;
     case "roundRobin":
-      return roundRobinPolicy(options?.quantum ?? 1);
+      return roundRobinPolicy(q);
     case "priorityNonPreemptive":
       return priorityPolicy(false);
     case "priorityPreemptive":
@@ -45,22 +54,38 @@ export function createPolicy(
     case "priorityAging":
       return agingPolicy(3, 1);
     case "multiLevelQueue":
-      return multiLevelQueuePolicy(DEFAULT_MLQ_QUEUES.map((q) => ({ ...q })));
+      return multiLevelQueuePolicy(DEFAULT_MLQ_QUEUES.map((x) => ({ ...x })));
     case "multiLevelFeedback":
       return multiLevelFeedbackPolicy(
         DEFAULT_MLFQ.quantumPerLevel,
         DEFAULT_MLFQ.agingPromotionInterval,
         DEFAULT_MLFQ.demotionThreshold
       );
+    case "hrrn":
+      return hrrnPolicy;
+    case "lrtf":
+      return lrtfPolicy;
+    case "lottery":
+      return lotteryPolicy();
+    case "stride":
+      return stridePolicy;
+    case "wfq":
+      return wfqPolicy;
+    case "edf":
+      return edfPolicy;
+    case "rms":
+      return rmsPolicy;
+    case "adaptive":
+      return adaptivePolicy(q);
   }
 }
 
 export function runAlgorithmOnKernel(
   algorithm: AlgorithmType,
   processes: Process[],
-  options?: { quantum?: number; coreCount?: number }
+  options?: RunOptions
 ): SimulationResult {
-  if (algorithm === "roundRobin") {
+  if (algorithm === "roundRobin" || algorithm === "adaptive") {
     const q = options?.quantum ?? 1;
     if (q <= 0 || !Number.isInteger(q)) {
       throw new Error(`Invalid quantum: must be a positive integer, got ${q}`);
@@ -68,13 +93,17 @@ export function runAlgorithmOnKernel(
   }
   const policy = createPolicy(algorithm, options);
   const coreCount = Math.min(16, Math.max(1, Math.floor(options?.coreCount ?? 1)));
-  return new SimulationKernel(policy, { system: { coreCount } }).run(processes);
+  const contextSwitchCost = Math.max(0, Math.floor(options?.contextSwitchCost ?? 0));
+  return new SimulationKernel(policy, {
+    system: { coreCount, contextSwitchCost },
+    seed: options?.seed ?? 1,
+  }).run(processes);
 }
 
 export function runAlgorithm(
   algorithm: AlgorithmType,
   processes: Process[],
-  options?: { quantum?: number; coreCount?: number }
+  options?: RunOptions
 ): SimulationResult {
   return runAlgorithmOnKernel(algorithm, processes, options);
 }

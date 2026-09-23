@@ -7,6 +7,7 @@ export interface SchedulerContext {
   all: Map<string, ProcessRuntime>;
   system: SystemConfig;
   schedule(time: number, type: SimulationEventType, opts?: { pid?: string; core?: number; payload?: Record<string, unknown> }): void;
+  random(): number;
 }
 
 export interface SchedulerPolicy {

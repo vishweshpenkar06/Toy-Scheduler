@@ -247,3 +247,157 @@ export function multiLevelFeedbackPolicy(
     },
   };
 }
+
+function responseRatio(rt: ProcessRuntime, now: number): number {
+  const service = totalBurst(rt);
+  const waiting = Math.max(0, now - rt.spec.arrivalTime - (service - rt.remainingCpu));
+  return (waiting + service) / Math.max(service, 1);
+}
+
+export const hrrnPolicy: SchedulerPolicy = {
+  id: "hrrn",
+  name: "Highest Response Ratio Next",
+  selectNext(candidates, context) {
+    return pickBest(candidates, (rt) => -responseRatio(rt, context.time));
+  },
+};
+
+export const lrtfPolicy: SchedulerPolicy = {
+  id: "lrtf",
+  name: "Longest Remaining Time First",
+  selectNext(candidates) {
+    return pickBest(candidates, (rt) => -rt.remainingCpu);
+  },
+  shouldPreempt(running, candidates) {
+    const best = pickBest(candidates, (rt) => -rt.remainingCpu);
+    if (!best) return false;
+    if (best.remainingCpu > running.remainingCpu) return true;
+    return best.remainingCpu === running.remainingCpu && best.pid.localeCompare(running.pid) < 0;
+  },
+};
+
+export function lotteryPolicy(): SchedulerPolicy {
+  return {
+    id: "lottery",
+    name: "Lottery Scheduling",
+    selectNext(candidates, context) {
+      if (candidates.length === 0) return null;
+      const tickets = candidates.map((c) => Math.max(1, c.spec.tickets ?? c.spec.weight ?? 1));
+      const total = tickets.reduce((s, t) => s + t, 0);
+      let draw = context.random() * total;
+      for (let i = 0; i < candidates.length; i++) {
+        draw -= tickets[i];
+        if (draw < 0) return candidates[i];
+      }
+      return candidates[candidates.length - 1];
+    },
+  };
+}
+
+export const stridePolicy: SchedulerPolicy = {
+  id: "stride",
+  name: "Stride Scheduling",
+  selectNext(candidates) {
+    if (candidates.length === 0) return null;
+    return pickBest(candidates, (rt) => {
+      const w = Math.max(1, rt.spec.weight ?? rt.spec.tickets ?? 1);
+      return (rt.readySince ?? 0) / w;
+    });
+  },
+  onProcessRun(rt) {
+    const w = Math.max(1, rt.spec.weight ?? rt.spec.tickets ?? 1);
+    rt.readySince = (rt.readySince ?? 0) + 100000 / w;
+  },
+  onProcessReady(rt) {
+    if (rt.readySince === undefined || rt.readySince < 1000) {
+      // initialize pass at arrival time scale
+      rt.readySince = rt.spec.arrivalTime;
+    }
+  },
+};
+
+export const wfqPolicy: SchedulerPolicy = {
+  id: "wfq",
+  name: "Weighted Fair Queuing",
+  selectNext(candidates) {
+    if (candidates.length === 0) return null;
+    // lowest virtual finish tag: (startTag + service/weight); approximate with remaining inversely weighted
+    return pickBest(candidates, (rt) => {
+      const w = Math.max(1, rt.spec.weight ?? 1);
+      const service = totalBurst(rt) - rt.remainingCpu;
+      return -(service / w + rt.remainingCpu / w);
+    });
+  },
+  shouldPreempt(running, candidates) {
+    const best = pickBest(candidates, (rt) => {
+      const w = Math.max(1, rt.spec.weight ?? 1);
+      const service = totalBurst(rt) - rt.remainingCpu;
+      return -(service / w + rt.remainingCpu / w);
+    });
+    if (!best) return false;
+    const score = (rt: ProcessRuntime) => {
+      const w = Math.max(1, rt.spec.weight ?? 1);
+      const service = totalBurst(rt) - rt.remainingCpu;
+      return -(service / w + rt.remainingCpu / w);
+    };
+    return score(best) < score(running);
+  },
+};
+
+export const edfPolicy: SchedulerPolicy = {
+  id: "edf",
+  name: "Earliest Deadline First",
+  selectNext(candidates) {
+    return pickBest(candidates, (rt) => rt.spec.deadline ?? Number.MAX_SAFE_INTEGER);
+  },
+  shouldPreempt(running, candidates) {
+    const best = pickBest(candidates, (rt) => rt.spec.deadline ?? Number.MAX_SAFE_INTEGER);
+    if (!best) return false;
+    const rd = best.spec.deadline ?? Number.MAX_SAFE_INTEGER;
+    const nd = running.spec.deadline ?? Number.MAX_SAFE_INTEGER;
+    if (rd < nd) return true;
+    return rd === nd && best.pid.localeCompare(running.pid) < 0;
+  },
+};
+
+export const rmsPolicy: SchedulerPolicy = {
+  id: "rms",
+  name: "Rate Monotonic",
+  selectNext(candidates) {
+    // lower period = higher priority (static)
+    return pickBest(candidates, (rt) => rt.spec.period ?? Number.MAX_SAFE_INTEGER);
+  },
+  shouldPreempt(running, candidates) {
+    const best = pickBest(candidates, (rt) => rt.spec.period ?? Number.MAX_SAFE_INTEGER);
+    if (!best) return false;
+    const bp = best.spec.period ?? Number.MAX_SAFE_INTEGER;
+    const rp = running.spec.period ?? Number.MAX_SAFE_INTEGER;
+    if (bp < rp) return true;
+    return bp === rp && best.pid.localeCompare(running.pid) < 0;
+  },
+};
+
+export function adaptivePolicy(quantum: number): SchedulerPolicy {
+  const lastService = new Map<string, number>();
+  return {
+    id: "adaptive",
+    name: "Adaptive Quantum RR",
+    quantum,
+    ignoreQuantumWhenAlone: true,
+    yieldWhenAloneOnArrival: true,
+    quantumFor(rt) {
+      const last = lastService.get(rt.pid);
+      if (last === undefined) return quantum;
+      // shrink quantum for frequently-waiting processes
+      return Math.max(1, Math.floor(quantum / 2));
+    },
+    onProcessRun(rt, _duration, context) {
+      lastService.set(rt.pid, context.time);
+    },
+    selectNext(candidates, context) {
+      if (candidates.length === 0) return null;
+      // prefer longest-waiting (anti-starvation) among arrived
+      return pickBest(candidates, (rt) => -(context.time - (rt.readySince ?? rt.spec.arrivalTime)));
+    },
+  };
+}

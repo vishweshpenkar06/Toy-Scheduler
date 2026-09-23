@@ -7,6 +7,7 @@ import { soundFx } from '../utils/audio';
 interface AlgorithmLeaderboardProps {
   processes: Process[];
   quantum: number;
+  contextSwitchCost?: number;
   onSelectAlgorithm: (alg: AlgorithmType) => void;
 }
 
@@ -20,11 +21,16 @@ interface RankedRow {
   avgResponse: number;
 }
 
-export const AlgorithmLeaderboard: React.FC<AlgorithmLeaderboardProps> = ({ processes, quantum, onSelectAlgorithm }) => {
+export const AlgorithmLeaderboard: React.FC<AlgorithmLeaderboardProps> = ({
+  processes,
+  quantum,
+  contextSwitchCost = 0,
+  onSelectAlgorithm,
+}) => {
   const rows: RankedRow[] = useMemo(() => {
     if (processes.length === 0) return [];
     return ALGORITHMS.map((alg) => {
-      const result = runAlgorithm(alg.id, processes, { quantum });
+      const result = runAlgorithm(alg.id, processes, { quantum, contextSwitchCost });
       return {
         id: alg.id,
         name: alg.name,
@@ -35,13 +41,13 @@ export const AlgorithmLeaderboard: React.FC<AlgorithmLeaderboardProps> = ({ proc
         avgResponse: result.averageResponseTime,
       };
     }).sort((a, b) => a.avgWait - b.avgWait || a.name.localeCompare(b.name));
-  }, [processes, quantum]);
+  }, [processes, quantum, contextSwitchCost]);
 
   if (processes.length === 0) {
     return (
       <div className="card card-body">
         <p className="empty-title">Nothing to benchmark</p>
-        <p className="empty-state">Configure a workload to compare all six algorithms side by side.</p>
+        <p className="empty-state">Configure a workload to compare all algorithms side by side.</p>
       </div>
     );
   }

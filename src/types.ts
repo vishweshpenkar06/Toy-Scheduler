@@ -4,13 +4,21 @@ export interface Process {
   burstTime: number;
   priority?: number;
   color?: string;
+  tickets?: number;
+  weight?: number;
+  deadline?: number;
+  period?: number;
+  bursts?: { type: 'cpu' | 'io'; duration: number }[];
 }
+
+export type SliceKind = 'EXECUTION' | 'IDLE' | 'CONTEXT_SWITCH' | 'IO' | 'INTERRUPT';
 
 export interface TimelineSlice {
   pid: string | "idle";
   start: number;
   end: number;
   core?: number;
+  kind?: SliceKind;
 }
 
 export interface ProcessResult {
@@ -19,11 +27,23 @@ export interface ProcessResult {
   turnaroundTime: number;
   responseTime: number;
   completionTime: number;
+  contextSwitches?: number;
+  deadlineMiss?: boolean;
 }
 
 export interface DecisionEntry {
   time: number;
   message: string;
+}
+
+export interface ExtendedMetrics {
+  throughput: number;
+  cpuUtilization: number;
+  contextSwitchCount: number;
+  jainFairness: number;
+  waitingP50: number;
+  waitingP95: number;
+  deadlineMisses: number;
 }
 
 export interface SimulationResult {
@@ -33,6 +53,9 @@ export interface SimulationResult {
   averageTurnaroundTime: number;
   averageResponseTime: number;
   decisionLog?: DecisionEntry[];
+  events?: unknown[];
+  explanations?: unknown[];
+  metrics?: ExtendedMetrics;
 }
 
 export interface RoundRobinOptions {
@@ -64,7 +87,18 @@ export interface MultiLevelFeedbackOptions {
   demotionThreshold?: number;
 }
 
-export type AlgorithmType = 'fifo' | 'sjf' | 'srtf' | 'roundRobin' | 'priorityNonPreemptive' | 'priorityPreemptive' | 'priorityAging' | 'multiLevelQueue' | 'multiLevelFeedback';
+export type AlgorithmType =
+  | 'fifo' | 'sjf' | 'srtf' | 'roundRobin'
+  | 'priorityNonPreemptive' | 'priorityPreemptive' | 'priorityAging'
+  | 'multiLevelQueue' | 'multiLevelFeedback'
+  | 'hrrn' | 'lrtf' | 'lottery' | 'stride' | 'wfq' | 'edf' | 'rms' | 'adaptive';
+
+export interface RunOptions {
+  quantum?: number;
+  coreCount?: number;
+  contextSwitchCost?: number;
+  seed?: number;
+}
 
 export interface AlgorithmInfo {
   id: AlgorithmType;

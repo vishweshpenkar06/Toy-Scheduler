@@ -18,6 +18,16 @@ function execTimeline(timeline: { pid: string; start: number; end: number }[]): 
     .join(" ");
 }
 
+function coreMetrics(results: { pid: string; waitingTime: number; turnaroundTime: number; responseTime: number; completionTime: number }[]) {
+  return results.map((r) => ({
+    pid: r.pid,
+    waitingTime: r.waitingTime,
+    turnaroundTime: r.turnaroundTime,
+    responseTime: r.responseTime,
+    completionTime: r.completionTime,
+  }));
+}
+
 describe("SimulationKernel FCFS parity with legacy fifo", () => {
   it("produces identical execution timeline", () => {
     const legacy = fifo(workload);
@@ -28,7 +38,7 @@ describe("SimulationKernel FCFS parity with legacy fifo", () => {
   it("produces identical process metrics", () => {
     const legacy = fifo(workload);
     const kernel = new SimulationKernel(fcfsPolicy).run(workload);
-    expect(kernel.processResults).toEqual(legacy.processResults);
+    expect(coreMetrics(kernel.processResults)).toEqual(coreMetrics(legacy.processResults));
     expect(kernel.averageWaitingTime).toBeCloseTo(legacy.averageWaitingTime, 10);
     expect(kernel.averageTurnaroundTime).toBeCloseTo(legacy.averageTurnaroundTime, 10);
     expect(kernel.averageResponseTime).toBeCloseTo(legacy.averageResponseTime, 10);
@@ -45,7 +55,7 @@ describe("SimulationKernel SJF parity with legacy sjf", () => {
   it("produces identical process metrics", () => {
     const legacy = sjf(workload);
     const kernel = new SimulationKernel(sjfPolicy).run(workload);
-    expect(kernel.processResults).toEqual(legacy.processResults);
+    expect(coreMetrics(kernel.processResults)).toEqual(coreMetrics(legacy.processResults));
   });
 });
 

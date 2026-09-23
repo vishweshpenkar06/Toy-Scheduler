@@ -13,6 +13,20 @@ export function generateDecisionLog(
 
   for (let i = 0; i < timeline.length; i++) {
     const slice = timeline[i];
+    if (slice.kind === 'CONTEXT_SWITCH') {
+      log.push({
+        time: slice.start,
+        message: `t=${slice.start}: context switch on core ${slice.core ?? 0} (${slice.end - slice.start}ms overhead)`,
+      });
+      continue;
+    }
+    if (slice.kind === 'IO') {
+      log.push({
+        time: slice.start,
+        message: `t=${slice.start}: ${slice.pid} blocked on I/O (${slice.end - slice.start}ms)`,
+      });
+      continue;
+    }
     if (slice.pid === 'idle') {
       log.push({
         time: slice.start,
@@ -145,6 +159,62 @@ export function generateDecisionLog(
             message: `t=${slice.start}: ${slice.pid} runs for ${duration}ms`,
           });
         }
+        break;
+
+      case 'hrrn':
+        log.push({
+          time: slice.start,
+          message: `t=${slice.start}: ${slice.pid} has highest response ratio next, runs ${duration}ms`,
+        });
+        break;
+
+      case 'lrtf':
+        log.push({
+          time: slice.start,
+          message: `t=${slice.start}: ${slice.pid} has longest remaining time, runs ${duration}ms`,
+        });
+        break;
+
+      case 'lottery':
+        log.push({
+          time: slice.start,
+          message: `t=${slice.start}: ${slice.pid} wins lottery draw, runs ${duration}ms`,
+        });
+        break;
+
+      case 'stride':
+        log.push({
+          time: slice.start,
+          message: `t=${slice.start}: ${slice.pid} has smallest pass value, runs ${duration}ms`,
+        });
+        break;
+
+      case 'wfq':
+        log.push({
+          time: slice.start,
+          message: `t=${slice.start}: ${slice.pid} has lowest virtual finish tag, runs ${duration}ms`,
+        });
+        break;
+
+      case 'edf':
+        log.push({
+          time: slice.start,
+          message: `t=${slice.start}: ${slice.pid} has earliest deadline, runs ${duration}ms`,
+        });
+        break;
+
+      case 'rms':
+        log.push({
+          time: slice.start,
+          message: `t=${slice.start}: ${slice.pid} has shortest period (static priority), runs ${duration}ms`,
+        });
+        break;
+
+      case 'adaptive':
+        log.push({
+          time: slice.start,
+          message: `t=${slice.start}: ${slice.pid} selected by adaptive RR (quantum may shrink/expand), runs ${duration}ms`,
+        });
         break;
 
       default:

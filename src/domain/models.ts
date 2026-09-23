@@ -110,11 +110,23 @@ export interface ProcessResult {
   turnaroundTime: number;
   responseTime: number;
   completionTime: number;
+  contextSwitches?: number;
+  deadlineMiss?: boolean;
 }
 
 export interface DecisionEntry {
   time: number;
   message: string;
+}
+
+export interface ExtendedMetrics {
+  throughput: number;
+  cpuUtilization: number;
+  contextSwitchCount: number;
+  jainFairness: number;
+  waitingP50: number;
+  waitingP95: number;
+  deadlineMisses: number;
 }
 
 export interface SimulationResult {
@@ -125,6 +137,8 @@ export interface SimulationResult {
   averageResponseTime: number;
   decisionLog?: DecisionEntry[];
   events?: SimulationEvent[];
+  explanations?: DecisionExplanation[];
+  metrics?: ExtendedMetrics;
 }
 
 export interface CandidateExplanation {
