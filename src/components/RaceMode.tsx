@@ -1,6 +1,6 @@
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { Process, SimulationResult, AlgorithmType } from '../types';
-import { runAlgorithm } from '../engine/scheduler';
+import { runAlgorithm } from '../engine/runAlgorithm';
 import { ALGORITHMS } from './Header';
 import { niceStep, buildColorMap } from '../utils/chartUtils';
 
@@ -22,8 +22,6 @@ interface RaceEntry {
 const MINI_TRACK_HEIGHT = 36;
 
 export const RaceMode: React.FC<RaceModeProps> = ({ processes, quantum, currentTimeStep, onSelectAlgorithm }) => {
-  const [pinnedAlg, setPinnedAlg] = useState<AlgorithmType | null>(null);
-
   const entries: RaceEntry[] = useMemo(() => {
     if (processes.length === 0) return [];
     return ALGORITHMS.map((alg) => {
@@ -37,7 +35,7 @@ export const RaceMode: React.FC<RaceModeProps> = ({ processes, quantum, currentT
         isFinished: currentTimeStep >= totalTime,
       };
     });
-  }, [processes, quantum]);
+  }, [processes, quantum, currentTimeStep]);
 
   if (processes.length === 0) {
     return (
@@ -75,12 +73,10 @@ export const RaceMode: React.FC<RaceModeProps> = ({ processes, quantum, currentT
           .sort((a, b) => a.totalTime - b.totalTime)
           .map((entry, rank) => {
             const isBest = entry.id === bestEntry?.id;
-            const isPinned = pinnedAlg === entry.id;
             const busyTime = entry.result.timeline
               .filter((s) => s.pid !== 'idle')
               .reduce((sum, s) => sum + (s.end - s.start), 0);
             const contextSwitches = entry.result.timeline.filter((s) => s.pid !== 'idle').length;
-            const progress = entry.totalTime > 0 ? Math.min(currentTimeStep / entry.totalTime, 1) : 0;
 
             return (
               <div
@@ -88,7 +84,7 @@ export const RaceMode: React.FC<RaceModeProps> = ({ processes, quantum, currentT
                 onClick={() => { onSelectAlgorithm(entry.id); }}
                 style={{
                   background: 'var(--surface)',
-                  border: `1px solid ${isBest ? 'rgba(15, 145, 104, 0.55)' : isPinned ? 'var(--border-focus)' : 'var(--border)'}`,
+                  border: `1px solid ${isBest ? 'rgba(15, 145, 104, 0.55)' : 'var(--border)'}`,
                   borderRadius: 'var(--radius-lg)',
                   padding: '12px 16px',
                   boxShadow: 'var(--shadow-sm)',

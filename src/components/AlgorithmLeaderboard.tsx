@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { Process, SimulationResult, AlgorithmType } from '../types';
-import { runAlgorithm } from '../engine/scheduler';
+import { runAlgorithm } from '../engine/runAlgorithm';
 import { ALGORITHMS } from './Header';
 import { soundFx } from '../utils/audio';
 
@@ -21,16 +21,8 @@ interface RankedRow {
 }
 
 export const AlgorithmLeaderboard: React.FC<AlgorithmLeaderboardProps> = ({ processes, quantum, onSelectAlgorithm }) => {
-  if (processes.length === 0) {
-    return (
-      <div className="card card-body">
-        <p className="empty-title">Nothing to benchmark</p>
-        <p className="empty-state">Configure a workload to compare all six algorithms side by side.</p>
-      </div>
-    );
-  }
-
   const rows: RankedRow[] = useMemo(() => {
+    if (processes.length === 0) return [];
     return ALGORITHMS.map((alg) => {
       const result = runAlgorithm(alg.id, processes, { quantum });
       return {
@@ -44,6 +36,15 @@ export const AlgorithmLeaderboard: React.FC<AlgorithmLeaderboardProps> = ({ proc
       };
     }).sort((a, b) => a.avgWait - b.avgWait || a.name.localeCompare(b.name));
   }, [processes, quantum]);
+
+  if (processes.length === 0) {
+    return (
+      <div className="card card-body">
+        <p className="empty-title">Nothing to benchmark</p>
+        <p className="empty-state">Configure a workload to compare all six algorithms side by side.</p>
+      </div>
+    );
+  }
 
   const maxWait = Math.max(...rows.map((r) => r.avgWait), 1);
   const minWait = Math.min(...rows.map((r) => r.avgWait));

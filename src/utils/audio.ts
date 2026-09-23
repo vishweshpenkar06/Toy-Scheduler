@@ -4,7 +4,7 @@ class SoundSynthesizer {
 
   private initCtx() {
     if (!this.ctx && typeof window !== 'undefined') {
-      const Ctor = window.AudioContext || (window as any).webkitAudioContext;
+      const Ctor = window.AudioContext ?? (window as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
       if (Ctor) this.ctx = new Ctor();
     }
     if (this.ctx?.state === 'suspended') this.ctx.resume();
@@ -26,7 +26,9 @@ class SoundSynthesizer {
       osc.connect(gain).connect(this.ctx.destination);
       osc.start();
       osc.stop(t + dur);
-    } catch {}
+    } catch {
+      return;
+    }
   }
 
   playClick() { this.play('sine', 800, 400, 0.04, 0.12); }

@@ -8,7 +8,6 @@ import {
   PriorityAgingOptions,
   MultiLevelQueueOptions,
   MultiLevelFeedbackOptions,
-  AlgorithmType,
 } from "../types";
 
 export function validateProcessInput(p: Process): string | null {
@@ -787,44 +786,6 @@ export function multiLevelFeedbackQueueScheduling(
     averageTurnaroundTime: avgTurnaround,
     averageResponseTime: avgResponse,
   };
-}
-
-
-export function runAlgorithm(
-  algorithm: AlgorithmType,
-  processes: Process[],
-  options?: { quantum?: number }
-): SimulationResult {
-  switch (algorithm) {
-    case 'fifo':
-      return fifo(processes);
-    case 'sjf':
-      return sjf(processes);
-    case 'srtf':
-      return srtf(processes);
-    case 'roundRobin':
-      return roundRobin(processes, { quantum: options?.quantum ?? 1 });
-    case 'priorityNonPreemptive':
-      return priorityScheduling(processes, { preemptive: false });
-    case 'priorityPreemptive':
-      return priorityScheduling(processes, { preemptive: true });
-    case 'priorityAging':
-      return priorityAgingScheduling(processes, { agingInterval: 3, agingAmount: 1 });
-    case 'multiLevelQueue':
-      return multiLevelQueueScheduling(processes, {
-        queues: [
-          { name: 'System', priorityRange: { min: 0, max: 1 } },
-          { name: 'Interactive', priorityRange: { min: 2, max: 3 } },
-          { name: 'Batch', priorityRange: { min: 4, max: Number.MAX_SAFE_INTEGER } },
-        ],
-      });
-    case 'multiLevelFeedback':
-      return multiLevelFeedbackQueueScheduling(processes, {
-        quantumPerLevel: [2, 4, 8],
-        agingPromotionInterval: 10,
-        demotionThreshold: 2,
-      });
-  }
 }
 
 

@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { Process, AlgorithmType, SimulationResult, PresetWorkload } from './types';
-import { runAlgorithm, runMultiCore } from './engine/scheduler';
+import { runAlgorithm } from './engine/runAlgorithm';
 import { PRESET_WORKLOADS } from './data/presets';
 import { soundFx } from './utils/audio';
 import { encodeStateToURL, decodeStateFromURL } from './utils/shareUrl';
@@ -57,9 +57,8 @@ export default function App() {
   const simulationResult: SimulationResult = useMemo(() => {
     if (processes.length === 0) return EMPTY_RESULT;
     try {
-      const singleCore = runAlgorithm(algorithm, processes, { quantum });
-      return runMultiCore(singleCore, coreCount);
-    } catch (err) {
+      return runAlgorithm(algorithm, processes, { quantum, coreCount });
+    } catch {
       return EMPTY_RESULT;
     }
   }, [processes, algorithm, quantum, coreCount]);
@@ -67,12 +66,12 @@ export default function App() {
   useEffect(() => {
     if (processes.length === 0) { setSimError(null); return; }
     try {
-      runAlgorithm(algorithm, processes, { quantum });
+      runAlgorithm(algorithm, processes, { quantum, coreCount });
       setSimError(null);
     } catch (err) {
       setSimError(err instanceof Error ? err.message : 'Unknown simulation error');
     }
-  }, [processes, algorithm, quantum]);
+  }, [processes, algorithm, quantum, coreCount]);
 
   const maxTime = useMemo(() => {
     if (simulationResult.timeline.length === 0) return 0;
@@ -338,7 +337,7 @@ export default function App() {
       {isOnboardingOpen && (
         <OnboardingModal onClose={() => {
           setIsOnboardingOpen(false);
-          try { localStorage.setItem('toy-scheduler-onboarded', '1'); } catch {}
+          try { localStorage.setItem('toy-scheduler-onboarded', '1'); } catch { /* storage unavailable */ return false; }
         }} />
       )}
     </div>
