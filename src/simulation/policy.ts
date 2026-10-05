@@ -22,6 +22,8 @@ export interface SchedulerPolicy {
   onTick?(context: SchedulerContext): void;
   selectNext(candidates: ProcessRuntime[], context: SchedulerContext): ProcessRuntime | null;
   shouldPreempt?(running: ProcessRuntime, candidates: ProcessRuntime[], context: SchedulerContext): boolean;
+  /** Higher score = more deserving of being preempted. Defaults to remainingCpu (SRTF/LRTF share this hook). */
+  victimScore?(process: ProcessRuntime): number;
   onProcessRun?(process: ProcessRuntime, duration: number, context: SchedulerContext): void;
   onProcessStop?(process: ProcessRuntime, reason: StopReason, context: SchedulerContext): void;
 }

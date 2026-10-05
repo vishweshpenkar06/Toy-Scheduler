@@ -12,11 +12,20 @@ import {
   multiLevelFeedbackQueueScheduling,
 } from "../scheduler";
 
+// Coalesce adjacent slices for the same pid. The legacy implementations split
+// the timeline at every internal event boundary (even when the incumbent is
+// re-selected and continues), while the kernel only splits on an actual
+// dispatch change. Parity must compare the *schedule*, not the segmentation:
+// a gratuitous split in the legacy code is not a context switch.
 function execTimeline(timeline: { pid: string; start: number; end: number }[]): string {
-  return timeline
-    .filter((s) => s.pid !== "idle")
-    .map((s) => `${s.pid}:${s.start}-${s.end}`)
-    .join(" ");
+  const merged: { pid: string; start: number; end: number }[] = [];
+  for (const s of timeline) {
+    if (s.pid === "idle") continue;
+    const last = merged[merged.length - 1];
+    if (last && last.pid === s.pid && last.end === s.start) last.end = s.end;
+    else merged.push({ ...s });
+  }
+  return merged.map((s) => `${s.pid}:${s.start}-${s.end}`).join(" ");
 }
 
 const classic: Process[] = [

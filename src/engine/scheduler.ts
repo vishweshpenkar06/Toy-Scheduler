@@ -492,7 +492,9 @@ export function priorityAgingScheduling(
     ...p,
     effectivePriority: p.priority ?? Number.MAX_SAFE_INTEGER,
     remaining: p.burstTime,
-    lastAgingCheck: 0,
+    // Age from arrival, not from t=0: seeding at 0 gave later arrivals a
+    // bigger unearned promotion than processes that had waited longer.
+    lastAgingCheck: p.arrivalTime,
   }));
   const remaining = new Set(processes.map((p) => p.pid));
   let currentTime = 0;

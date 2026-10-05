@@ -98,29 +98,30 @@ export function priorityPolicy(preemptive: boolean): SchedulerPolicy {
 export function agingPolicy(agingInterval: number, agingAmount: number): SchedulerPolicy {
   const effective = new Map<string, number>();
   const lastCheck = new Map<string, number>();
-  const scheduledTicks = new Set<number>();
+  const nextTick = new Map<string, number>();
 
   const seed = (rt: ProcessRuntime) => {
     if (!effective.has(rt.pid)) {
       effective.set(rt.pid, rt.spec.priority ?? NO_PRIORITY);
-      lastCheck.set(rt.pid, 0);
+      lastCheck.set(rt.pid, rt.spec.arrivalTime);
     }
   };
 
   const effPriority = (rt: ProcessRuntime) =>
     effective.get(rt.pid) ?? rt.spec.priority ?? NO_PRIORITY;
 
-  const ageAt = (time: number, all: Map<string, ProcessRuntime>) => {
-    for (const rt of all.values()) {
+  const ageAt = (time: number, processes: Iterable<ProcessRuntime>) => {
+    for (const rt of processes) {
       if (rt.state === "NEW" || rt.state === "TERMINATED") continue;
-      if (rt.spec.arrivalTime > time || rt.remainingCpu <= 0) continue;
-      const last = lastCheck.get(rt.pid) ?? 0;
+      if (rt.spec.arrivalTime > time) continue;
+      seed(rt);
+      const last = lastCheck.get(rt.pid) ?? rt.spec.arrivalTime;
       const dt = time - last;
       if (dt >= agingInterval) {
         const steps = Math.floor(dt / agingInterval);
         const current = effective.get(rt.pid) ?? rt.spec.priority ?? NO_PRIORITY;
         effective.set(rt.pid, Math.max(0, current - steps * agingAmount));
-        lastCheck.set(rt.pid, time);
+        lastCheck.set(rt.pid, last + steps * agingInterval);
       }
     }
   };
@@ -131,19 +132,22 @@ export function agingPolicy(agingInterval: number, agingAmount: number): Schedul
     onProcessArrival: seed,
     onProcessReady: seed,
     onProcessRun(_rt, duration, context) {
-      // Age at dispatch (selectNext already aged); schedule interrupts for waiting processes
+      const end = context.time + duration;
       for (const p of context.ready) {
         seed(p);
-        const last = lastCheck.get(p.pid) ?? 0;
-        const next = last + agingInterval;
-        if (next > context.time && next < context.time + duration && !scheduledTicks.has(next)) {
-          scheduledTicks.add(next);
-          context.schedule(next, "AGING_TICK");
+        const due = (lastCheck.get(p.pid) ?? p.spec.arrivalTime) + agingInterval;
+        const at = Math.min(Math.max(due, context.time + 1), end - 1);
+        if (at > context.time && nextTick.get(p.pid) !== at) {
+          nextTick.set(p.pid, at);
+          context.schedule(at, "AGING_TICK");
         }
       }
     },
+    // Preemption happens at the aging tick via kernel re-selection, not on
+    // arrival: aging raises a waiter's priority over the incumbent, and the
+    // tick is the point where that is re-evaluated.
     selectNext(candidates, context) {
-      ageAt(context.time, context.all);
+      ageAt(context.time, candidates);
       for (const c of candidates) seed(c);
       return pickBest(candidates, effPriority);
     },
@@ -268,6 +272,9 @@ export const lrtfPolicy: SchedulerPolicy = {
   selectNext(candidates) {
     return pickBest(candidates, (rt) => -rt.remainingCpu);
   },
+  // LRTF wants the longest job running, so the victim of a preemption is the
+  // running process with the SHORTEST remaining time (opposite of SRTF).
+  victimScore: (rt) => -rt.remainingCpu,
   shouldPreempt(running, candidates) {
     const best = pickBest(candidates, (rt) => -rt.remainingCpu);
     if (!best) return false;
@@ -378,21 +385,32 @@ export const rmsPolicy: SchedulerPolicy = {
 };
 
 export function adaptivePolicy(quantum: number): SchedulerPolicy {
-  const lastService = new Map<string, number>();
+  const quantumOf = new Map<string, number>();
+  const q = (rt: ProcessRuntime) => quantumOf.get(rt.pid) ?? quantum;
+
   return {
     id: "adaptive",
     name: "Adaptive Quantum RR",
     quantum,
     ignoreQuantumWhenAlone: true,
     yieldWhenAloneOnArrival: true,
-    quantumFor(rt) {
-      const last = lastService.get(rt.pid);
-      if (last === undefined) return quantum;
-      // shrink quantum for frequently-waiting processes
-      return Math.max(1, Math.floor(quantum / 2));
-    },
+    quantumFor: q,
     onProcessRun(rt, _duration, context) {
-      lastService.set(rt.pid, context.time);
+      // Waited longer than its own slice while competitors queued: widen it back.
+      const waited = context.time - (rt.readySince ?? rt.spec.arrivalTime);
+      if (context.ready.length > 0 && waited > q(rt)) {
+        quantumOf.set(rt.pid, Math.min(quantum, q(rt) * 2));
+      }
+    },
+    onProcessStop(rt, reason, context) {
+      if (reason === "COMPLETED") {
+        quantumOf.delete(rt.pid);
+        return;
+      }
+      // Burned a whole slice with competitors waiting: narrow its slice.
+      if (reason === "QUANTUM_EXPIRED" && context.ready.length > 0) {
+        quantumOf.set(rt.pid, Math.max(1, Math.floor(q(rt) / 2)));
+      }
     },
     selectNext(candidates, context) {
       if (candidates.length === 0) return null;

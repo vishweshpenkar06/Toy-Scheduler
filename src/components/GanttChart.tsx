@@ -24,14 +24,20 @@ export const GanttChart: React.FC<GanttChartProps> = ({ timeline, processes, cur
     );
   }
 
-  const totalTime = timeline[timeline.length - 1].end;
+  const totalTime = timeline.reduce((m, s) => Math.max(m, s.end), 0);
   const colorMap = buildColorMap(processes);
 
-  // Group slices by core
+  // Group slices by core. I/O is off-core (the process releases its core
+  // while blocked), so it gets its own track instead of landing on core 0.
   const numCores = Math.max(1, coreCount);
   const coreSlices = new Map<number, TimelineSlice[]>();
   for (let c = 0; c < numCores; c++) coreSlices.set(c, []);
+  const ioSlices: TimelineSlice[] = [];
   timeline.forEach((slice) => {
+    if (slice.kind === 'IO') {
+      ioSlices.push(slice);
+      return;
+    }
     const core = slice.core ?? 0;
     if (coreSlices.has(core)) {
       coreSlices.get(core)!.push(slice);
@@ -63,6 +69,15 @@ export const GanttChart: React.FC<GanttChartProps> = ({ timeline, processes, cur
   if (ticks[ticks.length - 1] !== totalTime) ticks.push(totalTime);
 
   const showPlayline = currentTimeStep >= 0 && currentTimeStep <= totalTime;
+
+  const tracks: { label: string; slices: TimelineSlice[] }[] = [];
+  for (let c = 0; c < numCores; c++) {
+    tracks.push({
+      label: numCores > 1 ? `Core ${c}` : '',
+      slices: [...(coreIdleGaps.get(c) ?? []), ...(coreSlices.get(c) ?? [])],
+    });
+  }
+  if (ioSlices.length > 0) tracks.push({ label: 'I/O', slices: ioSlices });
 
   return (
     <div className="card">
@@ -107,15 +122,15 @@ export const GanttChart: React.FC<GanttChartProps> = ({ timeline, processes, cur
               ))}
             </div>
 
-            {/* Render one track per core */}
-            {Array.from({ length: numCores }, (_, coreIdx) => {
-              const coreBlockSlices = [...(coreIdleGaps.get(coreIdx) ?? []), ...(coreSlices.get(coreIdx) ?? [])]
+            {/* Render one track per core, plus an I/O track when blocked work exists */}
+            {tracks.map((track, coreIdx) => {
+              const coreBlockSlices = [...track.slices]
                 .sort((a, b) => a.start - b.start || (a.kind === 'IDLE' ? 1 : 0) - (b.kind === 'IDLE' ? 1 : 0));
               return (
-                <div key={coreIdx} style={{ marginBottom: numCores > 1 ? 6 : 0 }}>
-                  {numCores > 1 && (
+                <div key={coreIdx} style={{ marginBottom: tracks.length > 1 ? 6 : 0 }}>
+                  {track.label && (
                     <div className="mono" style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-3)', marginBottom: 4 }}>
-                      Core {coreIdx}
+                      {track.label}
                     </div>
                   )}
                   <div

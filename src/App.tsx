@@ -64,26 +64,26 @@ export default function App() {
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
   const [currentTimeStep, setCurrentTimeStep] = useState<number>(0);
   const [playbackSpeed, setPlaybackSpeed] = useState<number>(1);
-  const [simError, setSimError] = useState<string | null>(null);
+  const [dismissedError, setDismissedError] = useState<string | null>(null);
 
-  const simulationResult: SimulationResult = useMemo(() => {
-    if (processes.length === 0) return EMPTY_RESULT;
+  // Single simulation pass: derive both the result and the error together so
+  // the engine is not run twice per state change.
+  const { simulationResult, simError } = useMemo((): { simulationResult: SimulationResult; simError: string | null } => {
+    if (processes.length === 0) return { simulationResult: EMPTY_RESULT, simError: null };
     try {
-      return runAlgorithm(algorithm, processes, { quantum, coreCount, contextSwitchCost });
-    } catch {
-      return EMPTY_RESULT;
-    }
-  }, [processes, algorithm, quantum, coreCount, contextSwitchCost]);
-
-  useEffect(() => {
-    if (processes.length === 0) { setSimError(null); return; }
-    try {
-      runAlgorithm(algorithm, processes, { quantum, coreCount, contextSwitchCost });
-      setSimError(null);
+      return {
+        simulationResult: runAlgorithm(algorithm, processes, { quantum, coreCount, contextSwitchCost }),
+        simError: null,
+      };
     } catch (err) {
-      setSimError(err instanceof Error ? err.message : 'Unknown simulation error');
+      return {
+        simulationResult: EMPTY_RESULT,
+        simError: err instanceof Error ? err.message : 'Unknown simulation error',
+      };
     }
   }, [processes, algorithm, quantum, coreCount, contextSwitchCost]);
+
+  const visibleError = simError && simError !== dismissedError ? simError : null;
 
   useEffect(() => {
     if (processes.length === 0) return;
@@ -304,18 +304,18 @@ export default function App() {
         </aside>
 
         <main className="main">
-          {simError && (
+          {visibleError && (
             <div className="form-error" style={{ marginBottom: 12, fontSize: 12 }}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
                 <circle cx="12" cy="12" r="10" />
                 <line x1="12" y1="8" x2="12" y2="12" />
                 <line x1="12" y1="16" x2="12" y2="16" />
               </svg>
-              <span><strong>Simulation error:</strong> {simError}</span>
+              <span><strong>Simulation error:</strong> {visibleError}</span>
               <button
                 className="btn btn-quiet"
                 style={{ marginLeft: 'auto', fontSize: 11, padding: '2px 6px' }}
-                onClick={() => setSimError(null)}
+                onClick={() => setDismissedError(simError)}
               >
                 Dismiss
               </button>

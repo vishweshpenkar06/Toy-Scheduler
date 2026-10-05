@@ -194,14 +194,10 @@ export class SimulationKernel {
       this.emit(this.time, "PROCESS_TERMINATE", { pid: rt.pid, core: coreId });
       if (this.hasPendingWork()) this.startContextSwitch(coreId);
     } else if (reason === "BLOCKED") {
-      rt.contextSwitches += 1;
-      core.contextSwitches += 1;
       this.policy.onProcessStop?.(rt, reason, this.makeContext());
       if (this.hasPendingWork()) this.startContextSwitch(coreId);
     } else {
       rt.preemptions += reason === "PREEMPTED" ? 1 : 0;
-      rt.contextSwitches += 1;
-      core.contextSwitches += 1;
       this.policy.onProcessStop?.(rt, reason, this.makeContext());
       this.pushReady(rt);
       if (this.hasPendingWork()) this.startContextSwitch(coreId);
@@ -223,7 +219,7 @@ export class SimulationKernel {
     return "cpu";
   }
 
-  private beginIo(rt: ProcessRuntime, coreId: number): void {
+  private beginIo(rt: ProcessRuntime): void {
     const bursts = interleavedBursts(rt.spec);
     const ioBurst = bursts[rt.currentBurstIndex + 1];
     if (!ioBurst || ioBurst.type !== "io") return;
@@ -231,21 +227,25 @@ export class SimulationKernel {
     rt.remainingIo = ioBurst.duration;
     const end = this.time + ioBurst.duration;
     this.blocked.set(rt.pid, { start: this.time, end });
-    this.timeline.push({ pid: rt.pid, start: this.time, end, core: coreId, kind: "IO" });
-    this.emit(end, "IO_COMPLETE", { pid: rt.pid, core: coreId });
+    // I/O is off-core: the blocked process releases its core so another
+    // process can be dispatched there while the I/O runs concurrently.
+    this.timeline.push({ pid: rt.pid, start: this.time, end, kind: "IO" });
+    this.emit(end, "IO_COMPLETE", { pid: rt.pid });
   }
 
   private preemptWorstIfNeeded(runningSlots: RunningSlot[]): boolean {
     if (!this.policy.shouldPreempt) return false;
     const context = this.makeContext();
+    const scoreOf = this.policy.victimScore ?? ((rt: ProcessRuntime) => rt.remainingCpu);
     let worst: RunningSlot | null = null;
-    let worstRemaining = -1;
+    let worstScore = Number.NEGATIVE_INFINITY;
     for (const slot of runningSlots) {
       const rt = this.runtimes.get(slot.pid);
       if (!rt) continue;
       if (this.policy.shouldPreempt(rt, [...this.ready], context)) {
-        if (rt.remainingCpu > worstRemaining) {
-          worstRemaining = rt.remainingCpu;
+        const score = scoreOf(rt);
+        if (score > worstScore) {
+          worstScore = score;
           worst = slot;
         }
       }
@@ -311,18 +311,23 @@ export class SimulationKernel {
   }
 
   private tryDispatchAll(): void {
-    for (let c = 0; c < this.cores.length; c++) {
-      if (this.ready.length === 0) break;
-      this.dispatchOn(c);
-    }
-    if (
-      this.policy.shouldPreempt &&
-      this.ready.length > 0 &&
-      this.running.size === this.cores.length &&
-      this.cores.length > 0 &&
-      this.preemptWorstIfNeeded([...this.running.values()])
-    ) {
-      this.tryDispatchAll();
+    // Iterative: a policy is free to re-preempt immediately, so a recursive
+    // self-call could unbounded-recurse. Cap iterations at what one full
+    // pass over cores+processes could ever legitimately need.
+    const maxIterations = this.cores.length * Math.max(1, this.runtimes.size) + 8;
+    let iterations = 0;
+    for (;;) {
+      for (let c = 0; c < this.cores.length; c++) {
+        if (this.ready.length === 0) break;
+        this.dispatchOn(c);
+      }
+      const preempted =
+        this.policy.shouldPreempt &&
+        this.ready.length > 0 &&
+        this.running.size === this.cores.length &&
+        this.cores.length > 0 &&
+        this.preemptWorstIfNeeded([...this.running.values()]);
+      if (!preempted || ++iterations > maxIterations) return;
     }
   }
 
@@ -374,8 +379,11 @@ export class SimulationKernel {
             if (next === "terminate") {
               this.stopRunning(event.core!, "COMPLETED");
             } else if (next === "io") {
+              // I/O first: the process leaves the core, then the core loads
+              // its next occupant (CS). Both slices are placed before
+              // anything else can claim the same interval.
+              this.beginIo(rt);
               this.stopRunning(event.core!, "BLOCKED");
-              this.beginIo(rt, event.core!);
             } else {
               // next CPU burst without IO — requeue
               this.stopRunning(event.core!, "PREEMPTED");
@@ -427,9 +435,18 @@ export class SimulationKernel {
         break;
       }
       case "AGING_TICK": {
+        // Re-select on each busy core and stop ONLY cores whose incumbent
+        // lost. A tick is a re-evaluation, not a global stop: force-stopping
+        // every core here used to fragment slices and inflate CS counts on
+        // cores that were unaffected by the promotion.
         for (const coreId of [...this.running.keys()]) {
-          this.stopRunning(coreId, "PREEMPTED");
+          const slot = this.running.get(coreId);
+          const rt = slot ? this.runtimes.get(slot.pid) : undefined;
+          if (!rt) continue;
+          const best = this.policy.selectNext([...this.ready, rt], this.makeContext());
+          if (best && best.pid !== rt.pid) this.stopRunning(coreId, "PREEMPTED");
         }
+        this.tryDispatchAll();
         break;
       }
       case "PREEMPT": {
@@ -466,6 +483,8 @@ export class SimulationKernel {
   }
 
   private runEventLoop(): void {
+    let passes = 0;
+    let lastTime = this.time;
     while (this.eventQueue.size > 0) {
       const now = this.eventQueue.peek()!.time;
 
@@ -476,6 +495,16 @@ export class SimulationKernel {
       }
 
       this.tryDispatchAll();
+
+      if (this.time !== lastTime) {
+        lastTime = this.time;
+        passes = 0;
+        continue;
+      }
+      // Time did not advance. A policy that preempts and re-dispatches at the
+      // very same instant would emit events forever; a well-behaved run needs
+      // only a couple of passes to dispatch and then consume that bookkeeping.
+      if (++passes > 8) return;
     }
   }
 
@@ -532,10 +561,13 @@ export class SimulationKernel {
         if (rt) maxEnd = Math.max(maxEnd, this.time + rt.remainingCpu);
       }
       this.advanceRunning(maxEnd);
+      // Advance the clock BEFORE stopping: stopRunning slices and stamps
+      // completion using `this.time`, so a stale clock would truncate the
+      // final execution slice (or drop it entirely).
+      this.time = maxEnd;
       for (const coreId of [...this.running.keys()]) {
         this.stopRunning(coreId, "COMPLETED");
       }
-      this.time = maxEnd;
       this.runEventLoop();
     }
 
