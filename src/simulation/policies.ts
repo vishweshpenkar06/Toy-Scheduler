@@ -301,55 +301,90 @@ export function lotteryPolicy(): SchedulerPolicy {
   };
 }
 
-export const stridePolicy: SchedulerPolicy = {
-  id: "stride",
-  name: "Stride Scheduling",
-  selectNext(candidates) {
-    if (candidates.length === 0) return null;
-    return pickBest(candidates, (rt) => {
-      const w = Math.max(1, rt.spec.weight ?? rt.spec.tickets ?? 1);
-      return (rt.readySince ?? 0) / w;
-    });
-  },
-  onProcessRun(rt) {
-    const w = Math.max(1, rt.spec.weight ?? rt.spec.tickets ?? 1);
-    rt.readySince = (rt.readySince ?? 0) + 100000 / w;
-  },
-  onProcessReady(rt) {
-    if (rt.readySince === undefined || rt.readySince < 1000) {
-      // initialize pass at arrival time scale
-      rt.readySince = rt.spec.arrivalTime;
-    }
-  },
-};
+const STRIDE_SCALE = 100000;
 
-export const wfqPolicy: SchedulerPolicy = {
-  id: "wfq",
-  name: "Weighted Fair Queuing",
-  selectNext(candidates) {
-    if (candidates.length === 0) return null;
-    // lowest virtual finish tag: (startTag + service/weight); approximate with remaining inversely weighted
-    return pickBest(candidates, (rt) => {
-      const w = Math.max(1, rt.spec.weight ?? 1);
-      const service = totalBurst(rt) - rt.remainingCpu;
-      return -(service / w + rt.remainingCpu / w);
-    });
-  },
-  shouldPreempt(running, candidates) {
-    const best = pickBest(candidates, (rt) => {
-      const w = Math.max(1, rt.spec.weight ?? 1);
-      const service = totalBurst(rt) - rt.remainingCpu;
-      return -(service / w + rt.remainingCpu / w);
-    });
-    if (!best) return false;
-    const score = (rt: ProcessRuntime) => {
-      const w = Math.max(1, rt.spec.weight ?? 1);
-      const service = totalBurst(rt) - rt.remainingCpu;
-      return -(service / w + rt.remainingCpu / w);
-    };
-    return score(best) < score(running);
-  },
-};
+function weightOf(rt: ProcessRuntime): number {
+  return Math.max(1, rt.spec.weight ?? rt.spec.tickets ?? 1);
+}
+
+/**
+ * Stride scheduling: every process owns a pass counter. The one with the
+ * lowest pass runs, and is charged one stride (STRIDE_SCALE / weight) for the
+ * turn it just took. A lighter process therefore pays more per turn and wins
+ * proportionally fewer turns. Built per run so the counters cannot leak
+ * between simulations.
+ */
+export function stridePolicy(quantum = 1): SchedulerPolicy {
+  const pass = new Map<string, number>();
+
+  return {
+    id: "stride",
+    name: "Stride Scheduling",
+    quantum,
+    ignoreQuantumWhenAlone: true,
+    onProcessArrival(rt) {
+      // A newcomer lines up beside whoever is currently least served rather
+      // than behind everyone, so it neither jumps the queue nor starves.
+      if (!pass.has(rt.pid)) pass.set(rt.pid, pass.size ? Math.min(...pass.values()) : 0);
+    },
+    selectNext(candidates) {
+      return pickBest(candidates, (rt) => pass.get(rt.pid) ?? 0);
+    },
+    onProcessRun(rt) {
+      pass.set(rt.pid, (pass.get(rt.pid) ?? 0) + STRIDE_SCALE / weightOf(rt));
+    },
+    // The process that has run most recently holds the highest pass, so it
+    // is the one that deserves to yield.
+    victimScore: (rt) => pass.get(rt.pid) ?? 0,
+    onProcessStop(rt, reason) {
+      if (reason === "COMPLETED") pass.delete(rt.pid);
+    },
+  };
+}
+
+/**
+ * Weighted Fair Queuing: each process carries a virtual finish tag. The one
+ * with the lowest tag runs and its tag is pushed forward by the service it
+ * consumed divided by its weight, so a heavy-weight tag climbs slowly and
+ * keeps winning turns. A newcomer starts at the current virtual time (the
+ * lowest tag in circulation), which is what makes it fair rather than FIFO.
+ */
+export function wfqPolicy(quantum = 1): SchedulerPolicy {
+  const finishTag = new Map<string, number>();
+  const startedAt = new Map<string, number>();
+  const virtualNow = () => (finishTag.size ? Math.min(...finishTag.values()) : 0);
+  const tagOf = (rt: ProcessRuntime) => finishTag.get(rt.pid) ?? 0;
+
+  return {
+    id: "wfq",
+    name: "Weighted Fair Queuing",
+    quantum,
+    ignoreQuantumWhenAlone: true,
+    onProcessArrival(rt) {
+      if (!finishTag.has(rt.pid)) finishTag.set(rt.pid, virtualNow());
+    },
+    selectNext(candidates) {
+      return pickBest(candidates, tagOf);
+    },
+    shouldPreempt(running, candidates) {
+      const best = pickBest(candidates, tagOf);
+      return best !== null && tagOf(best) < tagOf(running);
+    },
+    // The process with the highest tag has been served the most for its
+    // weight, so it is the one that should be displaced.
+    victimScore: tagOf,
+    onProcessRun(rt, _duration, context) {
+      if (!finishTag.has(rt.pid)) finishTag.set(rt.pid, virtualNow());
+      startedAt.set(rt.pid, context.time);
+    },
+    onProcessStop(rt, reason, context) {
+      const served = Math.max(0, context.time - (startedAt.get(rt.pid) ?? context.time));
+      startedAt.delete(rt.pid);
+      finishTag.set(rt.pid, tagOf(rt) + served / weightOf(rt));
+      if (reason === "COMPLETED") finishTag.delete(rt.pid);
+    },
+  };
+}
 
 export const edfPolicy: SchedulerPolicy = {
   id: "edf",

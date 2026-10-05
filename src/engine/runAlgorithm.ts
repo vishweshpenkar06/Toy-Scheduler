@@ -68,9 +68,9 @@ export function createPolicy(
     case "lottery":
       return lotteryPolicy();
     case "stride":
-      return stridePolicy;
+      return stridePolicy();
     case "wfq":
-      return wfqPolicy;
+      return wfqPolicy();
     case "edf":
       return edfPolicy;
     case "rms":
