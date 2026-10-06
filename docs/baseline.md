@@ -1,4 +1,4 @@
-# Baseline — Quantum Scheduler 2.0 Phase 0
+# Baseline — Toy Scheduler Phase 0
 
 Recorded 2026-09-23 before any transformation work.
 

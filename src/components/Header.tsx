@@ -103,7 +103,7 @@ export const Header: React.FC<HeaderProps> = ({
       <div className="brand">
         <div className="brand-mark">QS</div>
         <div>
-          <div className="brand-name">Quantum Scheduler</div>
+          <div className="brand-name">Toy Scheduler</div>
           <div className="brand-sub">CPU Algorithm Lab</div>
         </div>
       </div>

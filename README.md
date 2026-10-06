@@ -1,4 +1,4 @@
-# Quantum Scheduler
+# Toy Scheduler
 
 Interactive CPU scheduling laboratory. Build workloads (including multi-burst
 CPU/I/O processes, deadlines, and tickets), step through execution on an

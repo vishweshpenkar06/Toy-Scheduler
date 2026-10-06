@@ -8,6 +8,7 @@ import { downloadFile } from '../utils/chartUtils';
 interface ProcessControlCenterProps {
   processes: Process[];
   onAddProcess: (process: Process) => void;
+  onUpdateProcess: (originalPid: string, updated: Process) => void;
   onRemoveProcess: (pid: string) => void;
   onClearAll: () => void;
   onResetDefault: () => void;
@@ -19,6 +20,13 @@ const PlusIcon = () => (
   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
     <line x1="12" y1="5" x2="12" y2="19" />
     <line x1="5" y1="12" x2="19" y2="12" />
+  </svg>
+);
+
+const PencilIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M12 20h9" />
+    <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
   </svg>
 );
 
@@ -127,6 +135,7 @@ function validateImport(processes: Process[]): { errors: ImportError[]; duplicat
 export const ProcessControlCenter: React.FC<ProcessControlCenterProps> = ({
   processes,
   onAddProcess,
+  onUpdateProcess,
   onRemoveProcess,
   onClearAll,
   onResetDefault,
@@ -138,6 +147,7 @@ export const ProcessControlCenter: React.FC<ProcessControlCenterProps> = ({
   const [burstTime, setBurstTime] = useState(4);
   const [priority, setPriority] = useState(1);
   const [selectedColor, setSelectedColor] = useState(COLORS[processes.length % COLORS.length]);
+  const [editingPid, setEditingPid] = useState<string | null>(null);
   const [pidError, setPidError] = useState('');
   const [arrivalError, setArrivalError] = useState('');
   const [burstError, setBurstError] = useState('');
@@ -150,43 +160,73 @@ export const ProcessControlCenter: React.FC<ProcessControlCenterProps> = ({
   const [randArrivalSpread, setRandArrivalSpread] = useState(8);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleFieldBlur = () => {
+  const resetForm = () => {
+    setEditingPid(null);
+    setPid(`P${processes.length + 1}`);
+    setArrivalTime(0);
+    setBurstTime(4);
+    setPriority(1);
+    setSelectedColor(COLORS[processes.length % COLORS.length]);
     setPidError('');
     setArrivalError('');
     setBurstError('');
+  };
 
-    if (!pid.trim()) {
-      setPidError('Process ID is required.');
-    } else if (processes.some((p) => p.pid === pid.trim().toUpperCase()) && pid.trim().toUpperCase() !== '') {
-      setPidError(`"${pid.trim().toUpperCase()}" already exists.`);
+  const beginEdit = (p: Process) => {
+    soundFx.playClick();
+    setEditingPid(p.pid);
+    setPid(p.pid);
+    setArrivalTime(p.arrivalTime);
+    setBurstTime(p.burstTime);
+    setPriority(p.priority ?? 1);
+    setSelectedColor(p.color ?? COLORS[0]);
+    setPidError('');
+    setArrivalError('');
+    setBurstError('');
+  };
+
+  // Pure so submit does not depend on the previous render's error state:
+  // submitting with Enter fires no blur, so a queued setState would be stale.
+  const validate = (pidValue: string, arrival: number, burst: number) => {
+    const errors: { pid?: string; arrival?: string; burst?: string } = {};
+    const trimmed = pidValue.trim().toUpperCase();
+    if (!trimmed) {
+      errors.pid = 'Process ID is required.';
+    } else if (trimmed !== editingPid && processes.some((p) => p.pid === trimmed)) {
+      errors.pid = `"${trimmed}" already exists.`;
     }
-    if (arrivalTime < 0) {
-      setArrivalError('Cannot be negative.');
-    }
-    if (burstTime <= 0) {
-      setBurstError('Must be greater than zero.');
-    }
+    if (arrival < 0) errors.arrival = 'Cannot be negative.';
+    if (burst <= 0) errors.burst = 'Must be greater than zero.';
+    return errors;
+  };
+
+  const showErrors = (errors: { pid?: string; arrival?: string; burst?: string }) => {
+    setPidError(errors.pid ?? '');
+    setArrivalError(errors.arrival ?? '');
+    setBurstError(errors.burst ?? '');
+    return errors;
+  };
+
+  const handleFieldBlur = () => {
+    showErrors(validate(pid, arrivalTime, burstTime));
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    handleFieldBlur();
-    if (pidError || arrivalError || burstError) return;
-
-    const trimmedPid = pid.trim().toUpperCase();
-    if (!trimmedPid) {
-      setPidError('Process ID is required.');
-      return;
-    }
+    const errors = showErrors(validate(pid, arrivalTime, burstTime));
+    if (errors.pid || errors.arrival || errors.burst) return;
 
     soundFx.playClick();
-    onAddProcess({ pid: trimmedPid, arrivalTime, burstTime, priority, color: selectedColor });
-
-    setPid(`P${processes.length + 2}`);
-    setSelectedColor(COLORS[(processes.length + 1) % COLORS.length]);
-    setArrivalTime(0);
-    setBurstTime(4);
-    setPriority(1);
+    const next: Process = {
+      pid: pid.trim().toUpperCase(),
+      arrivalTime,
+      burstTime,
+      priority,
+      color: selectedColor,
+    };
+    if (editingPid) onUpdateProcess(editingPid, next);
+    else onAddProcess(next);
+    resetForm();
   };
 
   const handleExportJSON = () => downloadFile(JSON.stringify(processes, null, 2), 'workload.json', 'application/json');
@@ -260,7 +300,7 @@ export const ProcessControlCenter: React.FC<ProcessControlCenterProps> = ({
             Workload
             <span className="card-count">{processes.length}</span>
           </div>
-          <div style={{ display: 'flex', gap: 2 }}>
+          <div style={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
             <button className="btn btn-quiet" title="Generate random workload" onClick={() => { soundFx.playClick(); onGenerateRandom(); }}>
               <DiceIcon /> Random
             </button>
@@ -389,14 +429,19 @@ export const ProcessControlCenter: React.FC<ProcessControlCenterProps> = ({
         ) : (
           <div className="process-list">
             {processes.map((p) => (
-              <div key={p.pid} className="proc-row">
+              <div key={p.pid} className={`proc-row ${editingPid === p.pid ? 'proc-row-active' : ''}`}>
                 <span className="proc-dot" style={{ background: p.color ?? '#2154f0' }} />
-                <div className="proc-row-info">
+                <button
+                  type="button"
+                  className="proc-row-info proc-row-edit"
+                  aria-label={`Edit ${p.pid}, arrival ${p.arrivalTime}, burst ${p.burstTime}`}
+                  onClick={() => beginEdit(p)}
+                >
                   <div className="proc-name">{p.pid}</div>
                   <div className="proc-meta">
                     arr {p.arrivalTime} · burst {p.burstTime} · pri {p.priority ?? '–'}
                   </div>
-                </div>
+                </button>
                 <button
                   className="icon-btn proc-del"
                   title={`Remove ${p.pid}`}
@@ -414,8 +459,8 @@ export const ProcessControlCenter: React.FC<ProcessControlCenterProps> = ({
       <div className="card">
         <div className="card-head">
           <div className="card-title">
-            <PlusIcon />
-            <span>New process</span>
+            {editingPid ? <PencilIcon /> : <PlusIcon />}
+            <span>{editingPid ? `Edit ${editingPid}` : 'New process'}</span>
           </div>
         </div>
         <form className="card-body" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }} onSubmit={handleSubmit}>
@@ -457,9 +502,24 @@ export const ProcessControlCenter: React.FC<ProcessControlCenterProps> = ({
             </div>
           </div>
 
-          <button type="submit" className="btn btn-primary btn-block">
-            <PlusIcon /> Add process
-          </button>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button type="submit" className="btn btn-primary btn-block">
+              {editingPid ? (
+                <>
+                  <PencilIcon /> Save changes
+                </>
+              ) : (
+                <>
+                  <PlusIcon /> Add process
+                </>
+              )}
+            </button>
+            {editingPid && (
+              <button type="button" className="btn btn-ghost" onClick={() => { soundFx.playClick(); resetForm(); }}>
+                Cancel
+              </button>
+            )}
+          </div>
         </form>
       </div>
     </>

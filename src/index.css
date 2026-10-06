@@ -1,5 +1,5 @@
 /* -------------------------------------------------------------
-   QUANTUM SCHEDULER — DESIGN SYSTEM
+   TOY SCHEDULER — DESIGN SYSTEM
    Precision light theme for a scheduling engineering tool.
    ------------------------------------------------------------- */
 
@@ -353,10 +353,16 @@ select {
   min-height: 0;
   display: grid;
   grid-template-columns: 324px 1fr;
+  /* Without an explicit row the implicit row sizes to content, so a long
+     sidebar grows past the viewport and the document scrolls instead of
+     the panels. minmax(0, 1fr) pins the row to the viewport height. */
+  grid-template-rows: minmax(0, 1fr);
 }
 
 .sidebar {
+  min-height: 0;
   overflow-y: auto;
+  overflow-x: hidden;
   background: var(--surface);
   border-right: 1px solid var(--border);
   padding: 18px;
@@ -366,6 +372,7 @@ select {
 }
 
 .main {
+  min-height: 0;
   overflow-y: auto;
   padding: 22px 26px 40px;
 }
@@ -510,6 +517,9 @@ select {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
+  /* The title plus Random / Custom / Reset / Clear do not fit the 324px
+     sidebar in one row; without wrapping the last two are clipped. */
+  flex-wrap: wrap;
   padding: 14px 16px 10px;
 }
 
@@ -566,6 +576,33 @@ select {
   display: flex;
   flex-direction: column;
   gap: 1px;
+}
+
+/* The row's text is a real button so it is reachable by keyboard and
+   announced as an action, rather than a div with only onClick. */
+.proc-row-edit {
+  background: none;
+  border: 0;
+  padding: 2px 4px;
+  margin: -2px -4px;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+}
+
+.proc-row-edit:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.proc-row-active {
+  background: var(--accent-soft);
+}
+
+.proc-row:focus-within .proc-del {
+  opacity: 1;
 }
 
 .proc-del {

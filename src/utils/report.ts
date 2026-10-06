@@ -15,7 +15,7 @@ export function buildReportMarkdown(input: ReportInput): string {
   const name = ALGORITHMS.find((a) => a.id === input.algorithm)?.name ?? input.algorithm;
   const m = input.result.metrics;
   const lines: string[] = [
-    `# Quantum Scheduler Report`,
+    `# Toy Scheduler Report`,
     ``,
     `Generated: ${new Date().toISOString()}`,
     ``,

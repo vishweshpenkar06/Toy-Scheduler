@@ -64,7 +64,7 @@ describe('report', () => {
       contextSwitchCost: 1,
       result,
     });
-    expect(md).toContain('# Quantum Scheduler Report');
+    expect(md).toContain('# Toy Scheduler Report');
     expect(md).toContain('EDF');
     expect(md).toContain('| P1 |');
     expect(md).toContain('Jain fairness');

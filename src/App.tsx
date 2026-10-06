@@ -197,6 +197,8 @@ export default function App() {
   }, [handleTogglePlay, maxTime]);
 
   const handleAddProcess = (p: Process) => setProcesses((prev) => [...prev, p]);
+  const handleUpdateProcess = (originalPid: string, updated: Process) =>
+    setProcesses((prev) => prev.map((p) => (p.pid === originalPid ? updated : p)));
   const handleRemoveProcess = (pid: string) => setProcesses((prev) => prev.filter((p) => p.pid !== pid));
   const handleClearAll = () => setProcesses([]);
   const handleImportProcesses = (imported: Process[]) => setProcesses(imported);
@@ -294,6 +296,7 @@ export default function App() {
           <ProcessControlCenter
             processes={processes}
             onAddProcess={handleAddProcess}
+            onUpdateProcess={handleUpdateProcess}
             onRemoveProcess={handleRemoveProcess}
             onClearAll={handleClearAll}
             onResetDefault={handleResetDefault}
