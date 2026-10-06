@@ -10,6 +10,7 @@ tied to a concrete `file:line`.
 | --- | --- |
 | **[V]** | Verified directly during this audit (read + traced, or reproduced) |
 | **[A]** | Reported by a static audit pass and not yet reproduced at runtime. Reproduce first — write the failing test, then fix. |
+| **FIXED** ✔ | Landed on `main` after this audit was written |
 
 **Verification gate** (all four must pass before any commit):
 
@@ -87,19 +88,18 @@ workload with I/O and CS cost.
 
 ---
 
-### P0-3 · Enter-to-submit validates stale state **[A]**
+### P0-3 · Enter-to-submit validates stale state — **FIXED** ✔
 
-`ProcessControlCenter.tsx:171-174`: `handleSubmit` calls `handleFieldBlur()`
-(which *queues* `setArrivalError` / `setBurstError`) and then guards on
+`ProcessControlCenter.tsx`: `handleSubmit` called `handleFieldBlur()` (which
+*queued* `setArrivalError` / `setBurstError`) and then guarded on
 `pidError || arrivalError || burstError` — still the previous render's values in
 the same tick. Submitting with **Enter** (which fires no blur) with
-`arrival = -5` adds an invalid process. Only the PID branch (`:176-180`)
-re-checks synchronously.
+`arrival = -5` added an invalid process. Only the PID branch re-checked
+synchronously.
 
-**Fix:** extract a pure `validate(pid, arrival, burst, processes)` → errors and
-call it from both `handleFieldBlur` and `handleSubmit`.
-**Verify:** regression test submitting a negative arrival without an explicit blur.
-**Effort:** S.
+**Done:** validation is now a pure `validate(pid, arrival, burst)` called by both
+blur and submit, so submit no longer reads stale state. The pid-uniqueness check
+also ignores the process currently being edited.
 
 ---
 
@@ -417,6 +417,25 @@ producing an unhandled rejection and leaving the button stuck on "Copied!".
 
 **Fix:** `.catch(() => setShareCopied(false))`.
 **Effort:** XS.
+
+### P2-7 · Workspace grid row grows past the viewport — **FIXED** ✔
+
+`.workspace` was a grid with no `grid-template-rows`, so the implicit row sized
+to content. A long sidebar grew beyond the viewport, the document scrolled
+instead of the panels, and the top of the Workload card was clipped. Neither
+`.sidebar` nor `.main` had `min-height: 0`.
+
+**Done:** `grid-template-rows: minmax(0, 1fr)` on `.workspace` plus `min-height: 0`
+on both panels, so each scrolls independently inside the viewport.
+
+### P2-8 · Workload header clipped Reset and Clear — **FIXED** ✔
+
+`.list-head` is a non-wrapping flex row holding the title plus Random / Custom /
+Reset / Clear in 256px of usable width. The last two overflowed, were clipped,
+and produced a horizontal scrollbar on the sidebar (`overflow-y: auto` forces
+`overflow-x` to `auto`).
+
+**Done:** `.list-head` and its button group now wrap.
 
 ---
 
